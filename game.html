@@ -4203,7 +4203,7 @@ function drawBossElements() {
 
 function drawShop() {
   if(!G.shopOpen) return;
-  const pw=Math.min(W-16, 380), ph=Math.min(H*0.88, 500);
+  const pw=Math.min(W-16, 380), ph=Math.min(H*0.92, 620);
   const px=(W-pw)/2, py=(H-ph)/2;
   ctx.save();
   // Karartma
@@ -4275,6 +4275,96 @@ function drawShop() {
     ctx.font=`bold ${Math.min(10,W*0.025)}px Arial`;
     ctx.globalAlpha=1;
     ctx.fillText(`💰${it.cost}`, bx3+bw/2, by3+bh/2);
+  }
+
+  // ── Top Skinleri Bölümü ─────────────────────────────────────────
+  const shopRows = Math.ceil(SHOP_ITEMS.length/2);
+  const skinStartY = startY + shopRows*(itemH+itemGap) + 12;
+
+  // Ayırıcı çizgi
+  ctx.strokeStyle='rgba(255,215,0,0.25)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(px+16, skinStartY); ctx.lineTo(px+pw-16, skinStartY); ctx.stroke();
+
+  // Başlık
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillStyle='#ffd700'; ctx.font=`bold ${Math.min(14,W*0.035)}px Arial`;
+  ctx.fillText('⚽ Top Skinleri', W/2, skinStartY+16);
+
+  // Skin kartları — 2 sütun grid
+  const skCardW=(pw-32)/2, skCardH=100, skCardGap=8;
+  const skGridY=skinStartY+34;
+  for(let i=0;i<BALL_SKINS.length;i++){
+    const sk=BALL_SKINS[i];
+    const col=i%2, row=Math.floor(i/2);
+    const cx2=px+8+col*(skCardW+skCardGap);
+    const cy2=skGridY+row*(skCardH+skCardGap);
+    const isUnlocked=(SAVE.unlockedSkins||['classic']).includes(sk.id);
+    const isActive=(SAVE.ballSkin||'classic')===sk.id;
+
+    // Kart arka plan
+    ctx.save();
+    if(isActive){ ctx.shadowColor='#00ffff'; ctx.shadowBlur=12; }
+    rrect(cx2,cy2,skCardW,skCardH,10);
+    ctx.fillStyle=isUnlocked?'rgba(40,80,60,0.5)':'rgba(40,40,60,0.5)';
+    ctx.fill();
+    if(isActive){ ctx.strokeStyle='#00ffff'; ctx.lineWidth=2; }
+    else if(isUnlocked){ ctx.strokeStyle='#44cc66'; ctx.lineWidth=1.2; }
+    else if(sk.price>0){ ctx.strokeStyle='#ff8800'; ctx.lineWidth=1.2; }
+    else if(sk.adCount>0){ ctx.strokeStyle='#aa66ff'; ctx.lineWidth=1.2; }
+    else { ctx.strokeStyle='rgba(80,80,100,0.5)'; ctx.lineWidth=1; }
+    ctx.stroke();
+    ctx.restore();
+
+    // Top çizimi
+    drawBallSkin(sk.id, cx2+skCardW*0.22, cy2+skCardH*0.36, 22, 0);
+
+    // Aktif/unlocked rozet
+    if(isActive){
+      ctx.fillStyle='#00ffff'; ctx.font='bold 12px Arial';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('✓', cx2+skCardW-12, cy2+12);
+    } else if(isUnlocked){
+      ctx.fillStyle='#44cc66'; ctx.font='bold 10px Arial';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('✓', cx2+skCardW-12, cy2+12);
+    }
+
+    // İsim
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.fillStyle=isUnlocked?'#fff':'#aab';
+    ctx.font=`bold ${Math.min(11,W*0.028)}px Arial`;
+    ctx.fillText(sk.name, cx2+skCardW*0.42, cy2+skCardH*0.22);
+
+    // Stat bilgileri
+    ctx.font=`${Math.min(9,W*0.022)}px Arial`;
+    ctx.fillStyle='rgba(200,210,230,0.7)';
+    const stats=`⚡${sk.speedMult}× 📏${sk.sizeMult}× 💥${sk.damageMult}×`;
+    ctx.fillText(stats, cx2+skCardW*0.42, cy2+skCardH*0.42);
+
+    // Açıklama
+    ctx.fillStyle='rgba(160,170,190,0.6)';
+    ctx.fillText(sk.desc, cx2+skCardW*0.42, cy2+skCardH*0.58);
+
+    // Kilit durumu / fiyat
+    if(!isUnlocked){
+      ctx.textAlign='center';
+      if(sk.price>0){
+        const canAfford=G.gold>=sk.price;
+        ctx.fillStyle=canAfford?'#ffd700':'#886622';
+        ctx.font=`bold ${Math.min(10,W*0.025)}px Arial`;
+        ctx.fillText(`💰 ${sk.price}`, cx2+skCardW*0.65, cy2+skCardH*0.80);
+      }
+      if(sk.adCount>0){
+        ctx.fillStyle='#aa66ff';
+        ctx.font=`bold ${Math.min(10,W*0.025)}px Arial`;
+        const adX=sk.price>0? cx2+skCardW*0.88 : cx2+skCardW*0.65;
+        ctx.fillText(`📺 ×${sk.adCount}`, adX, cy2+skCardH*0.80);
+      }
+    } else if(isActive){
+      ctx.textAlign='center'; ctx.fillStyle='#00ffff';
+      ctx.font=`bold ${Math.min(10,W*0.025)}px Arial`;
+      ctx.fillText('AKTİF', cx2+skCardW*0.65, cy2+skCardH*0.80);
+    }
   }
   ctx.restore();
 }
@@ -5277,41 +5367,34 @@ function drawIntroScreen() {
     ctx.restore();
   }
 
-  // ── Oyun adı: NJOX ────────────────────────────────────────────
-  const titleY = H*0.22;
+  // ── Oyun adı: NJOX — temiz, yansımasız ─────────────────────────
+  const titleY = H*0.20;
   const njoxSize = Math.min(72, W*0.19);
   ctx.save();
   ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.font = `900 ${njoxSize}px Arial`;
-  ctx.lineWidth = 9; ctx.strokeStyle = 'rgba(0,0,15,0.95)';
+  ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(0,0,20,0.85)';
   ctx.strokeText('NJOX', W/2, titleY);
-  const tg1 = ctx.createLinearGradient(W/2-njoxSize*1.5, titleY, W/2+njoxSize*1.5, titleY);
+  const tg1 = ctx.createLinearGradient(W/2-njoxSize*1.5, titleY-njoxSize*0.4, W/2+njoxSize*1.5, titleY+njoxSize*0.4);
   tg1.addColorStop(0,'#ff44ee'); tg1.addColorStop(0.35,'#ffffff'); tg1.addColorStop(0.7,'#bb55ff'); tg1.addColorStop(1,'#44ddff');
-  ctx.shadowColor='#cc44ff'; ctx.shadowBlur=35+Math.sin(frame*0.06)*12;
   ctx.fillStyle=tg1; ctx.fillText('NJOX', W/2, titleY);
-  ctx.globalAlpha=0.12+0.07*Math.sin(frame*0.08); ctx.shadowBlur=0;
-  ctx.fillStyle='#ffffff'; ctx.fillText('NJOX', W/2, titleY);
   ctx.restore();
 
-  // "the Game" — küçük, altında
-  const subTitleY = titleY + njoxSize*0.62;
+  // "the Game" — düz yazı, shadow yok
+  const subTitleY = titleY + njoxSize*0.55;
   ctx.save();
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.font=`300 ${Math.min(20,W*0.050)}px Arial`;
-  ctx.shadowColor='#aa66ff'; ctx.shadowBlur=8;
-  ctx.fillStyle='rgba(200,160,255,0.75)';
+  ctx.font=`300 ${Math.min(18,W*0.045)}px Arial`;
+  ctx.fillStyle='rgba(200,170,255,0.8)';
   ctx.fillText('the Game', W/2, subTitleY);
   ctx.restore();
 
-  // "Kill the Stress!" — şık, cesur
-  const stressY = subTitleY + Math.min(28, H*0.042);
+  // "Kill the Stress!" — düz yazı, shadow yok
+  const stressY = subTitleY + Math.min(24, H*0.036);
   ctx.save();
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.font=`bold ${Math.min(24,W*0.060)}px Arial`;
-  const sg = ctx.createLinearGradient(W/2-80,0,W/2+80,0);
-  sg.addColorStop(0,'#ff5588'); sg.addColorStop(0.5,'#ffaa00'); sg.addColorStop(1,'#ff5588');
-  ctx.shadowColor='#ff3366'; ctx.shadowBlur=14+Math.sin(frame*0.05)*5;
-  ctx.fillStyle=sg;
+  ctx.font=`bold ${Math.min(20,W*0.050)}px Arial`;
+  ctx.fillStyle='#ffaa33';
   ctx.fillText('Kill the Stress! 😤', W/2, stressY);
   ctx.restore();
 
@@ -5530,15 +5613,15 @@ function onDown(e) {
   e.preventDefault();const p=getPos(e);
   // Shop açıksa önce shop'u işle (her fazda çalışır)
   if(G.shopOpen) {
-    const pw=Math.min(W-16,380), ph=Math.min(H*0.88,500);
+    const pw=Math.min(W-16,380), ph=Math.min(H*0.92,620);
     const px=(W-pw)/2, py=(H-ph)/2;
     if(p.x>=px+pw-32&&p.x<=px+pw-6&&p.y>=py+6&&p.y<=py+32){G.shopOpen=false;return;}
+    const itemW2=(pw-32)/2, itemH2=72, itemGap2=8, startY2=py+60;
     for(let i=0;i<SHOP_ITEMS.length;i++){
       const it=SHOP_ITEMS[i];
       const col=i%2, row=Math.floor(i/2);
-      const itemW=(pw-32)/2, itemH=72, itemGap=8, startY=py+60;
-      const ix=px+8+col*(itemW+itemGap), iy=startY+row*(itemH+itemGap);
-      if(p.x>=ix&&p.x<=ix+itemW&&p.y>=iy&&p.y<=iy+itemH){
+      const ix=px+8+col*(itemW2+itemGap2), iy=startY2+row*(itemH2+itemGap2);
+      if(p.x>=ix&&p.x<=ix+itemW2&&p.y>=iy&&p.y<=iy+itemH2){
         if(G.gold>=it.cost){
           const emptySlot=G.powerupSlots.indexOf(null);
           if(emptySlot!==-1){
@@ -5550,6 +5633,26 @@ function onDown(e) {
             G.shake=5; G.shopOpen=false;
           } else { spawnFloater(W/2,H*0.55,'⚠️ Slot dolu!','#ff4444'); }
         } else { spawnFloater(W/2,H*0.55,'💰 Yeterli altın yok!','#ff4444'); }
+        return;
+      }
+    }
+    // Skin kartları tıklama
+    const shopRows2=Math.ceil(SHOP_ITEMS.length/2);
+    const skinStartY2=startY2+shopRows2*(itemH2+itemGap2)+12;
+    const skCardW2=(pw-32)/2, skCardH2=100, skCardGap2=8, skGridY2=skinStartY2+34;
+    for(let i=0;i<BALL_SKINS.length;i++){
+      const sk=BALL_SKINS[i];
+      const col=i%2, row=Math.floor(i/2);
+      const cx2=px+8+col*(skCardW2+skCardGap2);
+      const cy2=skGridY2+row*(skCardH2+skCardGap2);
+      if(p.x>=cx2&&p.x<=cx2+skCardW2&&p.y>=cy2&&p.y<=cy2+skCardH2){
+        const isUnlocked=(SAVE.unlockedSkins||['classic']).includes(sk.id);
+        if(isUnlocked){
+          SAVE.ballSkin=sk.id; saveSave();
+          spawnFloater(W/2,H/2-30,'✓ '+sk.name+' seçildi!','#00ffcc');
+        } else {
+          showSkinUnlockOverlay(sk); G.shopOpen=false;
+        }
         return;
       }
     }
@@ -5665,7 +5768,7 @@ function onDown(e) {
 
   // Shop açık iken özel input
   if(G.shopOpen) {
-    const pw=Math.min(W-16,380), ph=Math.min(H*0.88,500);
+    const pw=Math.min(W-16,380), ph=Math.min(H*0.92,620);
     const px=(W-pw)/2, py=(H-ph)/2;
     // Kapat butonu
     if(p.x>=px+pw-32&&p.x<=px+pw-6&&p.y>=py+6&&p.y<=py+32){G.shopOpen=false;return;}
@@ -5681,7 +5784,7 @@ function onDown(e) {
           if(emptySlot!==-1){
             G.gold-=it.cost;
             G.powerupSlots[emptySlot]={type:it.puType,pulse:0};
-            G.puActivateFlash[emptySlot] = 180; // 3sn pulsing "AKTİF ET"
+            G.puActivateFlash[emptySlot] = 180;
             spawnParticles(W/2,H/2,it.color,18,true);
             spawnFloater(W/2,H/2-30,it.emoji+' '+it.name+' ALINDI!',it.color);
             G.shake=5; G.shopOpen=false;
@@ -5690,6 +5793,26 @@ function onDown(e) {
           }
         } else {
           spawnFloater(W/2,H*0.55,'💰 Yeterli altın yok!','#ff4444');
+        }
+        return;
+      }
+    }
+    // Skin kartları tıklama
+    const shopRows3=Math.ceil(SHOP_ITEMS.length/2);
+    const skinStartY3=startY+shopRows3*(itemH+itemGap)+12;
+    const skCardW3=(pw-32)/2, skCardH3=100, skCardGap3=8, skGridY3=skinStartY3+34;
+    for(let i=0;i<BALL_SKINS.length;i++){
+      const sk=BALL_SKINS[i];
+      const col=i%2, row=Math.floor(i/2);
+      const cx3=px+8+col*(skCardW3+skCardGap3);
+      const cy3=skGridY3+row*(skCardH3+skCardGap3);
+      if(p.x>=cx3&&p.x<=cx3+skCardW3&&p.y>=cy3&&p.y<=cy3+skCardH3){
+        const isUnlocked=(SAVE.unlockedSkins||['classic']).includes(sk.id);
+        if(isUnlocked){
+          SAVE.ballSkin=sk.id; saveSave();
+          spawnFloater(W/2,H/2-30,'✓ '+sk.name+' seçildi!','#00ffcc');
+        } else {
+          showSkinUnlockOverlay(sk); G.shopOpen=false;
         }
         return;
       }
