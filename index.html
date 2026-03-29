@@ -454,6 +454,7 @@ function initBoss() {
     segs.push({ col:pos.col, row:pos.row,
                 prevCol:pos.col, prevRow:pos.row,
                 x:bx(pos.col), y:by(pos.row),
+                displayX:bx(pos.col), displayY:by(pos.row),
                 hp:segHp, maxHp:segHp,
                 shake:0, _dead:false, isHead:(i===0) });
   }
@@ -1669,13 +1670,29 @@ function update() {
     // Interpolasyon: her segmentin x,y'sini smooth güncelle
     const t = Math.min(1, boss.moveT);
     const te = t<0.5 ? 2*t*t : -1+(4-2*t)*t; // ease in-out
-    for(const seg of boss.segments) {
+    for(let si=0; si<boss.segments.length; si++) {
+      const seg = boss.segments[si];
       if(seg._dead) continue;
       const px = bx(seg.prevCol !== undefined ? seg.prevCol : seg.col);
       const py = by(seg.prevRow !== undefined ? seg.prevRow : seg.row);
       const tx2 = bx(seg.col), ty2 = by(seg.row);
       seg.x = px + (tx2-px)*te;
       seg.y = py + (ty2-py)*te;
+      // Smooth display positions with lerp — head faster, body segments follow with delay
+      const lerpFactor = si === 0 ? 0.18 : Math.max(0.06, 0.14 - si * 0.012);
+      if(seg.displayX === undefined) { seg.displayX = seg.x; seg.displayY = seg.y; }
+      seg.displayX += (seg.x - seg.displayX) * lerpFactor;
+      seg.displayY += (seg.y - seg.displayY) * lerpFactor;
+      // Snake-like undulation perpendicular to movement direction
+      if(si > 0) {
+        const prevSeg = boss.segments[si-1];
+        const mdx = seg.x - (prevSeg._dead ? seg.x : prevSeg.x);
+        const mdy = seg.y - (prevSeg._dead ? seg.y : prevSeg.y);
+        const moveAngle = Math.atan2(mdy, mdx);
+        const wave = Math.sin(frame * 0.08 + si * 1.2) * BS * 0.08;
+        seg.displayX += Math.cos(moveAngle + Math.PI/2) * wave;
+        seg.displayY += Math.sin(moveAngle + Math.PI/2) * wave;
+      }
       if(seg.shake>0) seg.shake--;
     }
     // ── Kara delik orbital hareketi ─────────────────────────
@@ -3178,23 +3195,38 @@ function drawDragonHead(head, neck, ph, meta) {
   const angle=Math.atan2(hcy-ncy, hcx-ncx);
   const hs=BS*1.26;
   const hpR=head.hp/head.maxHp;
+  // Breathing animation — subtle scale pulse
+  const breathe = 0.97 + 0.06 * Math.sin(frame * 0.035);
   ctx.save();
   ctx.translate(hcx,hcy);
   ctx.rotate(angle);
+  ctx.scale(breathe, breathe);
   const blendR=1-hpR;
+
+  // ── Pulsing dark aura ─────────────────────────────────────
+  ctx.save();
+  const auraPulse = 0.6 + 0.4 * Math.sin(frame * 0.04);
+  const auraR = hs * (0.72 + 0.12 * Math.sin(frame * 0.03));
+  const auraG = ctx.createRadialGradient(0,0,hs*0.3,0,0,auraR);
+  auraG.addColorStop(0, `rgba(${dr},${dg},${db},0)`);
+  auraG.addColorStop(0.6, `rgba(${dr},${dg},${db},${0.15*auraPulse})`);
+  auraG.addColorStop(1, `rgba(0,0,0,${0.25*auraPulse})`);
+  ctx.fillStyle = auraG;
+  ctx.beginPath();ctx.arc(0,0,auraR,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+
   // ── Boyun birleşimi ──────────────────────────────────────
   ctx.save();
   ctx.shadowColor=meta.c1; ctx.shadowBlur=14+Math.sin(ph)*5;
-  const neckG=ctx.createLinearGradient(-hs*0.5,0,0,0);
-  neckG.addColorStop(0,`rgba(${Math.round(mr+blendR*(255-mr)*0.5)},${Math.round(mg-mg*blendR*0.6)},${Math.round(mb-mb*blendR*0.5)},0.9)`);
-  neckG.addColorStop(1,`rgba(${dr},${dg},${db},0)`);
+  const neckG2=ctx.createLinearGradient(-hs*0.5,0,0,0);
+  neckG2.addColorStop(0,`rgba(${Math.round(mr+blendR*(255-mr)*0.5)},${Math.round(mg-mg*blendR*0.6)},${Math.round(mb-mb*blendR*0.5)},0.9)`);
+  neckG2.addColorStop(1,`rgba(${dr},${dg},${db},0)`);
   ctx.beginPath();ctx.ellipse(-hs*0.22,0,hs*0.32,hs*0.30,0,0,Math.PI*2);
-  ctx.fillStyle=neckG;ctx.fill();ctx.shadowBlur=0;ctx.restore();
+  ctx.fillStyle=neckG2;ctx.fill();ctx.shadowBlur=0;ctx.restore();
   // ── Ana kafa şekli ────────────────────────────────────────
   ctx.save();
   ctx.shadowColor=meta.c1;ctx.shadowBlur=16+Math.sin(ph*0.9)*5;
   const hg=ctx.createRadialGradient(-hs*0.08,-hs*0.12,hs*0.04,hs*0.02,0,hs*0.62);
-  // Sağlıklı→meta rengi, hasarlı→kırmızıya kayar
   hg.addColorStop(0,`rgb(${Math.min(255,mr+80)},${Math.min(255,mg+80)},${Math.min(255,mb+80)})`);
   hg.addColorStop(0.30,meta.c1);
   hg.addColorStop(0.65,`rgb(${Math.round(mr+blendR*(200-mr))},${Math.round(mg-mg*blendR*0.8)},${Math.round(mb-mb*blendR*0.8)})`);
@@ -3212,32 +3244,125 @@ function drawDragonHead(head, neck, ph, meta) {
   ctx.beginPath();ctx.arc(hs*0.465,hs*0.00,hs*0.022,0,Math.PI*2);ctx.fill();
   ctx.beginPath();ctx.arc(hs*0.465,hs*0.12,hs*0.022,0,Math.PI*2);ctx.fill();
   ctx.restore();
-  // ── Gülümseme ─────────────────────────────────────────────
-  ctx.strokeStyle=meta.c2;ctx.lineWidth=hs*0.026;ctx.lineCap='round';
-  ctx.beginPath();ctx.moveTo(hs*0.27,hs*0.14);
-  ctx.quadraticCurveTo(hs*0.40,hs*0.26,hs*0.50,hs*0.16);ctx.stroke();
-  // ── Göz ───────────────────────────────────────────────────
-  const ex=hs*0.07, ey=-hs*0.15;
-  ctx.fillStyle=meta.c2;
-  ctx.beginPath();ctx.ellipse(ex,ey,hs*0.128,hs*0.108,-0.18,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle='#ffffff';
-  ctx.beginPath();ctx.ellipse(ex,ey,hs*0.097,hs*0.084,-0.18,0,Math.PI*2);ctx.fill();
-  const blinkScale=Math.abs(Math.sin(ph*0.28+1.4))>0.94?0.18:1;
-  ctx.save();ctx.scale(1,blinkScale);
-  ctx.fillStyle='#ee1133';
-  ctx.beginPath();ctx.arc(ex+hs*0.010,ey/blinkScale+hs*0.005,hs*0.058,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle='#110022';
-  ctx.beginPath();ctx.arc(ex+hs*0.014,ey/blinkScale+hs*0.005,hs*0.030,0,Math.PI*2);ctx.fill();
+
+  // ── Jagged mouth with teeth ─────────────────────────────────
+  ctx.save();
+  const mouthY = hs*0.18;
+  const mouthW = hs*0.3;
+  const mouthH = hs*0.10 + Math.sin(frame*0.05)*hs*0.02;
+  ctx.fillStyle = `rgba(${Math.max(0,dr-40)},0,0,0.9)`;
+  ctx.beginPath();
+  ctx.moveTo(hs*0.20, mouthY);
+  ctx.lineTo(hs*0.20+mouthW, mouthY);
+  ctx.lineTo(hs*0.20+mouthW, mouthY+mouthH);
+  ctx.lineTo(hs*0.20, mouthY+mouthH);
+  ctx.closePath(); ctx.fill();
+  // Teeth (top)
+  ctx.fillStyle = '#ffffffdd';
+  const teethCount = 5;
+  const toothW = mouthW / teethCount;
+  for(let ti=0;ti<teethCount;ti++){
+    const tx = hs*0.20 + ti*toothW;
+    ctx.beginPath();
+    ctx.moveTo(tx, mouthY);
+    ctx.lineTo(tx+toothW*0.5, mouthY+mouthH*0.45);
+    ctx.lineTo(tx+toothW, mouthY);
+    ctx.closePath(); ctx.fill();
+  }
+  // Teeth (bottom)
+  for(let ti=0;ti<teethCount-1;ti++){
+    const tx = hs*0.20 + ti*toothW + toothW*0.5;
+    ctx.beginPath();
+    ctx.moveTo(tx, mouthY+mouthH);
+    ctx.lineTo(tx+toothW*0.5, mouthY+mouthH-mouthH*0.35);
+    ctx.lineTo(tx+toothW, mouthY+mouthH);
+    ctx.closePath(); ctx.fill();
+  }
   ctx.restore();
-  ctx.fillStyle='rgba(255,255,255,0.92)';
-  ctx.beginPath();ctx.arc(ex-hs*0.020,ey-hs*0.022,hs*0.022,0,Math.PI*2);ctx.fill();
-  ctx.strokeStyle=meta.c2;ctx.lineWidth=hs*0.020;
-  ctx.beginPath();ctx.arc(ex,ey,hs*0.097,Math.PI*1.22,Math.PI*1.82);ctx.stroke();
+
+  // ── Angry eyes that track nearest ball ──────────────────────
+  // Find nearest active ball for eye tracking
+  let ballTargetX = hcx + Math.cos(angle)*hs, ballTargetY = hcy + Math.sin(angle)*hs;
+  if(G.activeBalls && G.activeBalls.length > 0) {
+    let minDist = Infinity;
+    for(const b of G.activeBalls) {
+      if(b.done) continue;
+      const d = Math.hypot(b.x-hcx, b.y-hcy);
+      if(d < minDist) { minDist=d; ballTargetX=b.x; ballTargetY=b.y; }
+    }
+  }
+  // Transform ball position into head's local coordinate space
+  const cosA=Math.cos(-angle), sinA=Math.sin(-angle);
+  const relBx=(ballTargetX-hcx)*cosA-(ballTargetY-hcy)*sinA;
+  const relBy=(ballTargetX-hcx)*sinA+(ballTargetY-hcy)*cosA;
+  // Eye positions (two angry eyes)
+  const eyePositions = [
+    {ex:hs*0.12, ey:-hs*0.18},  // top eye
+    {ex:hs*0.12, ey:hs*0.02}    // bottom eye (second eye for menacing look)
+  ];
+  for(const ep of eyePositions) {
+    const {ex,ey} = ep;
+    // Eye socket (dark outline)
+    ctx.fillStyle=meta.c2;
+    ctx.beginPath();ctx.ellipse(ex,ey,hs*0.128,hs*0.108,-0.18,0,Math.PI*2);ctx.fill();
+    // Eyeball white
+    ctx.fillStyle='#ffffff';
+    ctx.beginPath();ctx.ellipse(ex,ey,hs*0.097,hs*0.084,-0.18,0,Math.PI*2);ctx.fill();
+    // Pupil tracks ball
+    const lookAngle = Math.atan2(relBy-ey, relBx-ex);
+    const lookDist = Math.min(hs*0.028, Math.hypot(relBx-ex, relBy-ey)*0.02);
+    const pupilX = ex + Math.cos(lookAngle)*lookDist;
+    const pupilY = ey + Math.sin(lookAngle)*lookDist;
+    // Blink
+    const blinkScale=Math.abs(Math.sin(ph*0.28+1.4))>0.94?0.18:1;
+    ctx.save();ctx.scale(1,blinkScale);
+    // Glowing red iris
+    ctx.fillStyle='#ee1133';
+    ctx.shadowColor='#ff0000';ctx.shadowBlur=8;
+    ctx.beginPath();ctx.arc(pupilX,pupilY/blinkScale,hs*0.058,0,Math.PI*2);ctx.fill();
+    ctx.shadowBlur=0;
+    // Dark pupil slit (vertical for menacing look)
+    ctx.fillStyle='#110022';
+    ctx.beginPath();ctx.ellipse(pupilX+hs*0.004,pupilY/blinkScale,hs*0.015,hs*0.038,0,0,Math.PI*2);ctx.fill();
+    ctx.restore();
+    // Eye highlight
+    ctx.fillStyle='rgba(255,255,255,0.92)';
+    ctx.beginPath();ctx.arc(ex-hs*0.020,ey-hs*0.022,hs*0.020,0,Math.PI*2);ctx.fill();
+    // Angry eyebrow
+    ctx.strokeStyle=meta.c2;ctx.lineWidth=hs*0.032;ctx.lineCap='round';
+    ctx.beginPath();
+    const browDir = ey < 0 ? -1 : 1;
+    ctx.moveTo(ex-hs*0.10,ey-hs*0.12+browDir*hs*0.02);
+    ctx.lineTo(ex+hs*0.10,ey-hs*0.14);
+    ctx.stroke();
+  }
+
+  // ── Horns/spikes on top ────────────────────────────────────
+  ctx.save();
+  for(let hi=0;hi<2;hi++){
+    const side = hi===0?-1:1;
+    const hornBaseX = hs*0.05 + side*hs*0.15;
+    const hornBaseY = -hs*0.35;
+    const hornTipX = hornBaseX + side*hs*0.12;
+    const hornTipY = hornBaseY - hs*0.28;
+    const hornG2=ctx.createLinearGradient(hornBaseX,hornBaseY,hornTipX,hornTipY);
+    hornG2.addColorStop(0,`rgb(${Math.min(255,mr+120)},${Math.min(255,mg+120)},${Math.min(255,mb+120)})`);
+    hornG2.addColorStop(0.7,meta.c2);
+    hornG2.addColorStop(1,'#ffffff');
+    ctx.fillStyle=hornG2;ctx.strokeStyle=`rgba(${dr},${dg},${db},0.6)`;ctx.lineWidth=hs*0.016;
+    ctx.beginPath();
+    ctx.moveTo(hornBaseX-hs*0.04, hornBaseY);
+    const waveH = Math.sin(ph*1.2+hi*2)*hs*0.02;
+    ctx.quadraticCurveTo(hornTipX+waveH, hornTipY, hornBaseX+hs*0.04, hornBaseY);
+    ctx.closePath();ctx.fill();ctx.stroke();
+  }
+  ctx.restore();
+
   // ── Fin/taç (3 tüy) — meta.c1 tonu ──────────────────────
   ctx.save();
   for(let i=0;i<3;i++){
     const fx=-hs*0.20+i*hs*0.14;
-    const finH=hs*(0.26+i*0.05);
+    const finH=hs*(0.22+i*0.04);
     const waveOff=Math.sin(ph*1.1+i*0.9)*hs*0.022;
     const finG=ctx.createLinearGradient(fx,-hs*0.28,fx+waveOff,-hs*0.28-finH);
     finG.addColorStop(0,`rgb(${Math.min(255,mr+80)},${Math.min(255,mg+80)},${Math.min(255,mb+80)})`);
@@ -3245,41 +3370,31 @@ function drawDragonHead(head, neck, ph, meta) {
     finG.addColorStop(1,meta.c2);
     ctx.fillStyle=finG;
     ctx.beginPath();
-    ctx.moveTo(fx-hs*0.055,-hs*0.27);
-    ctx.quadraticCurveTo(fx+waveOff,-hs*0.27-finH,fx+hs*0.055,-hs*0.27);
+    ctx.moveTo(fx-hs*0.045,-hs*0.27);
+    ctx.quadraticCurveTo(fx+waveOff,-hs*0.27-finH,fx+hs*0.045,-hs*0.27);
     ctx.closePath();ctx.fill();
-    ctx.fillStyle=`rgba(255,255,255,0.28)`;
+    ctx.fillStyle='rgba(255,255,255,0.22)';
     ctx.beginPath();
-    ctx.moveTo(fx-hs*0.020,-hs*0.28);
-    ctx.quadraticCurveTo(fx+waveOff*0.5,-hs*0.28-finH*0.6,fx+hs*0.018,-hs*0.28);
+    ctx.moveTo(fx-hs*0.016,-hs*0.28);
+    ctx.quadraticCurveTo(fx+waveOff*0.5,-hs*0.28-finH*0.6,fx+hs*0.014,-hs*0.28);
     ctx.closePath();ctx.fill();
   }
   ctx.restore();
-  // ── Boynuz ─────────────────────────────────────────────────
-  ctx.save();
-  const hornG=ctx.createLinearGradient(hs*0.04,-hs*0.28,hs*0.22,-hs*0.50);
-  hornG.addColorStop(0,`rgb(${Math.min(255,mr+120)},${Math.min(255,mg+120)},${Math.min(255,mb+120)})`);
-  hornG.addColorStop(1,'#ffffff');
-  ctx.fillStyle=hornG;ctx.strokeStyle=meta.c2;ctx.lineWidth=hs*0.018;
-  ctx.beginPath();
-  ctx.moveTo(hs*0.02,-hs*0.28);
-  ctx.quadraticCurveTo(hs*0.09,-hs*0.52,hs*0.21,-hs*0.40);
-  ctx.quadraticCurveTo(hs*0.13,-hs*0.28,hs*0.02,-hs*0.28);
-  ctx.closePath();ctx.fill();ctx.stroke();ctx.restore();
+
   // ── Cam parlaması ──────────────────────────────────────────
   const shine=ctx.createRadialGradient(-hs*0.16,-hs*0.20,0,-hs*0.08,-hs*0.12,hs*0.42);
-  shine.addColorStop(0,'rgba(255,255,255,0.55)');
-  shine.addColorStop(0.42,'rgba(255,255,255,0.12)');
+  shine.addColorStop(0,'rgba(255,255,255,0.45)');
+  shine.addColorStop(0.42,'rgba(255,255,255,0.10)');
   shine.addColorStop(1,'rgba(255,255,255,0)');
   ctx.beginPath();ctx.ellipse(hs*0.05,0,hs*0.52,hs*0.44,0,0,Math.PI*2);
   ctx.fillStyle=shine;ctx.fill();
   // ── Boss emojisi ────────────────────────────────────────────
-  ctx.font=`${Math.floor(hs*0.42)}px serif`;
+  ctx.font=`${Math.floor(hs*0.36)}px serif`;
   ctx.textAlign='center';ctx.textBaseline='middle';
   ctx.shadowColor='#000';ctx.shadowBlur=6;
   ctx.fillText(meta.emoji, hs*0.06, 0);
   ctx.shadowBlur=0;
-  // ── HP bar ─────────────────────────────────────────────────
+  // ── HP bar (per-segment, under head) ───────────────────────
   const bw=hs*0.9, barH=4, bx4=-bw/2, by4=hs*0.46;
   ctx.fillStyle='rgba(0,0,0,0.55)';ctx.fillRect(bx4,by4,bw,barH);
   const hpCol=hpR>0.55?'#22dd88':hpR>0.28?'#ffcc00':'#ff3d5a';
@@ -3565,6 +3680,9 @@ function drawBossElements() {
   const boss=G.boss;
   const ph=frame*0.055;
   const aliveSegs=boss.segments.filter(s=>!s._dead&&s.hp>0);
+  // Helper: get display coords (smooth) for a segment
+  function sx(s){ return (s.displayX !== undefined ? s.displayX : s.x) + BS/2; }
+  function sy(s){ return (s.displayY !== undefined ? s.displayY : s.y) + BS/2; }
   // ── Boss tipi renkleri ─────────────────────────────────────
   const meta = BOSS_META[boss.type] || BOSS_META.dragon;
   const [mr,mg,mb] = hexToRgbArr(meta.c1);
@@ -3572,58 +3690,89 @@ function drawBossElements() {
   const [pr,pg,pb] = hexToRgbArr(meta.particle);
 
   if(aliveSegs.length >= 2) {
-    // ── Gövde ana yolu — koyu outline ──────────────────────
+    // ── Bezier connections between segments — dark outline ──────
     ctx.save();
-    ctx.lineWidth=BS*0.85;ctx.lineCap='round';ctx.lineJoin='round';
-    ctx.strokeStyle=`rgba(${dr},${dg},${db},0.88)`;
-    ctx.shadowColor=meta.c2;ctx.shadowBlur=8;
-    ctx.beginPath();
-    ctx.moveTo(aliveSegs[0].x+BS/2,aliveSegs[0].y+BS/2);
-    for(let i=1;i<aliveSegs.length;i++){
-      if(!aliveSegs[i]._dead) ctx.lineTo(aliveSegs[i].x+BS/2,aliveSegs[i].y+BS/2);
+    ctx.lineCap='round';ctx.lineJoin='round';
+    ctx.shadowColor=meta.c2;ctx.shadowBlur=10;
+    for(let i=0;i<aliveSegs.length-1;i++){
+      const a=aliveSegs[i], b=aliveSegs[i+1];
+      const ax=sx(a),ay=sy(a),bxx=sx(b),byy=sy(b);
+      const midX=(ax+bxx)/2, midY=(ay+byy)/2;
+      // Taper width: thicker near head, thinner toward tail
+      const widthRatio = 1 - (i / aliveSegs.length) * 0.5;
+      ctx.lineWidth = BS * 0.82 * widthRatio;
+      ctx.strokeStyle=`rgba(${dr},${dg},${db},0.88)`;
+      ctx.beginPath(); ctx.moveTo(ax,ay);
+      // Use quadratic bezier with perpendicular offset for smooth curve
+      const cpOff = Math.sin(ph*0.7 + i*0.8) * BS * 0.12;
+      const perpX = -(byy-ay), perpY = (bxx-ax);
+      const pLen = Math.hypot(perpX,perpY)||1;
+      ctx.quadraticCurveTo(midX + perpX/pLen*cpOff, midY + perpY/pLen*cpOff, bxx, byy);
+      ctx.stroke();
     }
-    ctx.stroke();ctx.restore();
+    ctx.restore();
 
-    // ── Gövde ana rengi (boss tipine göre, HP'ye göre kırmızıya kayar) ──
+    // ── Bezier connections — main color gradient ────────────────
     ctx.save();
-    ctx.lineWidth=BS*0.68;ctx.lineCap='round';ctx.lineJoin='round';
-    const head0=aliveSegs[0], tail0=aliveSegs[aliveSegs.length-1];
-    const bodyG=ctx.createLinearGradient(head0.x,head0.y,tail0.x,tail0.y);
+    ctx.lineCap='round';ctx.lineJoin='round';
     const hpRatioAvg=aliveSegs.reduce((a,s)=>a+s.hp/s.maxHp,0)/aliveSegs.length;
     const dmg=1-hpRatioAvg;
-    const r1=Math.round(mr+dmg*(220-mr)), g1=Math.round(mg-mg*dmg*0.7), b1=Math.round(mb-mb*dmg*0.7);
-    bodyG.addColorStop(0,`rgb(${r1},${g1},${b1})`);
-    bodyG.addColorStop(0.45,meta.c1);
-    bodyG.addColorStop(1,meta.c2);
-    ctx.strokeStyle=bodyG;ctx.shadowColor=meta.c1;ctx.shadowBlur=6;
-    ctx.beginPath();
-    ctx.moveTo(aliveSegs[0].x+BS/2,aliveSegs[0].y+BS/2);
-    for(let i=1;i<aliveSegs.length;i++){
-      if(!aliveSegs[i]._dead) ctx.lineTo(aliveSegs[i].x+BS/2,aliveSegs[i].y+BS/2);
+    ctx.shadowColor=meta.c1;ctx.shadowBlur=6;
+    for(let i=0;i<aliveSegs.length-1;i++){
+      const a=aliveSegs[i], b=aliveSegs[i+1];
+      const ax=sx(a),ay=sy(a),bxx=sx(b),byy=sy(b);
+      const midX=(ax+bxx)/2, midY=(ay+byy)/2;
+      const widthRatio = 1 - (i / aliveSegs.length) * 0.5;
+      ctx.lineWidth = BS * 0.65 * widthRatio;
+      const segG=ctx.createLinearGradient(ax,ay,bxx,byy);
+      const r1=Math.round(mr+dmg*(220-mr)), g1=Math.round(mg-mg*dmg*0.7), b1=Math.round(mb-mb*dmg*0.7);
+      segG.addColorStop(0,`rgb(${r1},${g1},${b1})`);
+      segG.addColorStop(1,meta.c1);
+      ctx.strokeStyle=segG;
+      ctx.beginPath(); ctx.moveTo(ax,ay);
+      const cpOff = Math.sin(ph*0.7 + i*0.8) * BS * 0.12;
+      const perpX = -(byy-ay), perpY = (bxx-ax);
+      const pLen = Math.hypot(perpX,perpY)||1;
+      ctx.quadraticCurveTo(midX + perpX/pLen*cpOff, midY + perpY/pLen*cpOff, bxx, byy);
+      ctx.stroke();
     }
-    ctx.stroke();ctx.restore();
+    ctx.restore();
 
-    // ── Karın plakları (yeşil/sarı şeritler) ────────────────
+    // ── Body segment circles with armor texture ───────────────
     ctx.save();ctx.shadowBlur=0;
-    for(let i=1;i<aliveSegs.length-1;i++){
+    for(let i=1;i<aliveSegs.length;i++){
       const seg=aliveSegs[i];
       if(seg._dead) continue;
-      const prev=aliveSegs[i-1],next=aliveSegs[i+1];
-      if(!prev||!next) continue;
-      const dx=next.x-prev.x, dy=next.y-prev.y;
-      const segAngle=Math.atan2(dy,dx);
-      const scx=seg.x+BS/2, scy=seg.y+BS/2;
-      // Karın rengi: boss tipinin c1'inin açık tonu
-      const bv=i%3===0?1.4:i%3===1?1.2:1.0;
-      const bellyCol=`rgb(${Math.min(255,Math.round(mr*bv+60))},${Math.min(255,Math.round(mg*bv+60))},${Math.min(255,Math.round(mb*bv+60))})`;
+      const prev=aliveSegs[i-1], next=aliveSegs[Math.min(i+1,aliveSegs.length-1)];
+      const dxx=sx(next)-sx(prev), dyy=sy(next)-sy(prev);
+      const segAngle=Math.atan2(dyy,dxx);
+      const scx=sx(seg), scy=sy(seg);
+      const segR = BS*0.38;
+      // Idle wobble
+      const wobble = Math.sin(frame * 0.06 + i * 0.9) * BS * 0.02;
       ctx.save();
-      ctx.translate(scx,scy);ctx.rotate(segAngle);
-      ctx.fillStyle=bellyCol;ctx.strokeStyle='rgba(0,80,0,0.5)';ctx.lineWidth=0.8;
-      ctx.beginPath();ctx.ellipse(0,BS*0.12,BS*0.38,BS*0.22,0,0,Math.PI*2);
-      ctx.fill();ctx.stroke();
-      // Plak parlaması
-      ctx.fillStyle='rgba(255,255,255,0.28)';
-      ctx.beginPath();ctx.ellipse(-BS*0.08,BS*0.07,BS*0.14,BS*0.10,0,0,Math.PI*2);ctx.fill();
+      ctx.translate(scx + wobble, scy);
+      ctx.rotate(segAngle);
+      // Gradient body circle
+      const bodyGrad = ctx.createRadialGradient(-segR*0.2,-segR*0.2,0,0,0,segR);
+      const bv=i%3===0?1.3:i%3===1?1.15:1.0;
+      bodyGrad.addColorStop(0,`rgb(${Math.min(255,Math.round(mr*bv+80))},${Math.min(255,Math.round(mg*bv+80))},${Math.min(255,Math.round(mb*bv+80))})`);
+      bodyGrad.addColorStop(0.6,meta.c1);
+      bodyGrad.addColorStop(1,meta.c2);
+      ctx.fillStyle=bodyGrad;
+      ctx.beginPath();ctx.arc(0,0,segR,0,Math.PI*2);ctx.fill();
+      // Armor-like scale arcs
+      ctx.strokeStyle=`rgba(${dr},${dg},${db},0.4)`;ctx.lineWidth=1;
+      for(let a=0;a<3;a++){
+        const arcOff = (a-1)*segR*0.35;
+        ctx.beginPath();ctx.arc(arcOff, 0, segR*0.5, Math.PI*0.8, Math.PI*1.2);ctx.stroke();
+      }
+      // Belly highlight
+      ctx.fillStyle=`rgb(${Math.min(255,Math.round(mr*bv+60))},${Math.min(255,Math.round(mg*bv+60))},${Math.min(255,Math.round(mb*bv+60))})`;
+      ctx.beginPath();ctx.ellipse(0,segR*0.15,segR*0.7,segR*0.4,0,0,Math.PI*2);ctx.fill();
+      // Shine highlight
+      ctx.fillStyle='rgba(255,255,255,0.22)';
+      ctx.beginPath();ctx.ellipse(-segR*0.2,-segR*0.2,segR*0.3,segR*0.2,0,0,Math.PI*2);ctx.fill();
       ctx.restore();
     }
     ctx.restore();
@@ -3631,10 +3780,10 @@ function drawBossElements() {
     // ── Kuyruk alevi (pembe/magenta) ─────────────────────────
     const tail=aliveSegs[aliveSegs.length-1];
     const preTail=aliveSegs[aliveSegs.length-2];
-    const tdx=tail.x-preTail.x, tdy=tail.y-preTail.y;
+    const tdx=sx(tail)-sx(preTail), tdy=sy(tail)-sy(preTail);
     const tAngle=Math.atan2(tdy,tdx);
     ctx.save();
-    ctx.translate(tail.x+BS/2,tail.y+BS/2);
+    ctx.translate(sx(tail),sy(tail));
     ctx.rotate(tAngle+Math.PI);
     const flm=BS*0.72*(0.78+Math.sin(ph*2.4)*0.22);
     ctx.shadowColor=meta.particle;ctx.shadowBlur=18+Math.sin(ph*2.8)*7;
@@ -3643,13 +3792,11 @@ function drawBossElements() {
     fG.addColorStop(0.25,`rgba(${pr},${pg},${pb},0.88)`);
     fG.addColorStop(0.6,`rgba(${dr},${dg},${db},0.55)`);
     fG.addColorStop(1,`rgba(${dr},${dg},${db},0)`);
-    // Alev şekli
     ctx.beginPath();
     ctx.moveTo(-flm*0.22,0);
     ctx.quadraticCurveTo(-flm*0.35,-flm*0.5+Math.sin(ph*3)*flm*0.08,0,-flm);
     ctx.quadraticCurveTo(flm*0.35,-flm*0.5+Math.sin(ph*3+1)*flm*0.08,flm*0.22,0);
     ctx.closePath();ctx.fillStyle=fG;ctx.fill();
-    // İç parlama
     ctx.shadowBlur=0;
     const fG2=ctx.createRadialGradient(0,-flm*0.22,0,0,-flm*0.22,flm*0.32);
     fG2.addColorStop(0,'rgba(255,255,255,0.9)');
@@ -3660,7 +3807,30 @@ function drawBossElements() {
   // ── Baş çizimi (her şeyin üstüne) ─────────────────────────
   if(aliveSegs.length>=1) {
     const head=aliveSegs[0], neck=aliveSegs[1]||aliveSegs[0];
-    drawDragonHead(head,neck,ph,meta);
+    // Pass display coords to head drawing
+    const headDraw = { ...head, x: (head.displayX !== undefined ? head.displayX : head.x), y: (head.displayY !== undefined ? head.displayY : head.y) };
+    const neckDraw = { ...neck, x: (neck.displayX !== undefined ? neck.displayX : neck.x), y: (neck.displayY !== undefined ? neck.displayY : neck.y) };
+    drawDragonHead(headDraw,neckDraw,ph,meta);
+  }
+
+  // ── Boss name floating above head ──────────────────────────
+  if(aliveSegs.length>=1) {
+    const head=aliveSegs[0];
+    const hx = sx(head), hy = sy(head);
+    const bossName = SAVE.customBossName || meta.name;
+    const bobY = Math.sin(frame * 0.04) * 4;
+    ctx.save();
+    ctx.font = 'bold 15px Arial';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.lineWidth = 3;
+    ctx.lineJoin = 'round';
+    const nameY = hy - BS*0.9 + bobY;
+    ctx.strokeText(bossName, hx, nameY);
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = meta.c1; ctx.shadowBlur = 6;
+    ctx.fillText(bossName, hx, nameY);
+    ctx.shadowBlur = 0;
+    ctx.restore();
   }
 
   // Draw towers
@@ -4154,19 +4324,58 @@ function drawUI() {
     ctx.fillStyle=tlCol; ctx.font=`bold ${Math.min(11,W*0.028)}px Arial`;
     ctx.fillText(`⚔️ ${tl} tur kaldı`, W/2, TOP_H/2+8);
 
-    // Boss HP bar — üst çubuğun içinde, altta
+    // Boss HP bar — full-width at top of play area
     const totalHp=G.boss.segments.reduce((s,sg)=>s+(sg._dead?0:Math.max(0,sg.hp)),0);
     const maxHp=G.boss.segments.reduce((s,sg)=>s+sg.maxHp,0);
     const bprog=maxHp>0?totalHp/maxHp:0;
-    const bbw=W*0.55, bbh=4, bbx=(W-bbw)/2, bby=TOP_H-6;
+    // Animated display HP (smooth decrease)
+    if(G.boss._displayHpRatio === undefined) G.boss._displayHpRatio = bprog;
+    G.boss._displayHpRatio += (bprog - G.boss._displayHpRatio) * 0.08;
+    const displayProg = G.boss._displayHpRatio;
+    const bbw=W*0.88, bbh=8, bbx=(W-bbw)/2, bby=TOP_H-10;
     ctx.shadowBlur=0;
-    ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(bbx,bby,bbw,bbh);
-    if(bprog>0){
-      const bgg=ctx.createLinearGradient(bbx,bby,bbx+bbw,bby);
-      bgg.addColorStop(0,'#ff2244'); bgg.addColorStop(1,'#ff8800');
-      ctx.shadowColor='#ff2244'; ctx.shadowBlur=4;
-      ctx.fillStyle=bgg; ctx.fillRect(bbx,bby,bbw*bprog,bbh);
+    // Background
+    ctx.fillStyle='rgba(0,0,0,0.6)';
+    ctx.beginPath();
+    const bRadius=bbh/2;
+    ctx.moveTo(bbx+bRadius,bby);ctx.lineTo(bbx+bbw-bRadius,bby);
+    ctx.arcTo(bbx+bbw,bby,bbx+bbw,bby+bRadius,bRadius);
+    ctx.arcTo(bbx+bbw,bby+bbh,bbx+bbw-bRadius,bby+bbh,bRadius);
+    ctx.lineTo(bbx+bRadius,bby+bbh);
+    ctx.arcTo(bbx,bby+bbh,bbx,bby+bRadius,bRadius);
+    ctx.arcTo(bbx,bby,bbx+bRadius,bby,bRadius);
+    ctx.closePath();ctx.fill();
+    if(displayProg>0){
+      // Gradient: red→yellow→green based on HP percentage
+      const bgg=ctx.createLinearGradient(bbx,bby,bbx+bbw*displayProg,bby);
+      if(bprog > 0.5) {
+        bgg.addColorStop(0,'#22dd88'); bgg.addColorStop(1,'#88ff44');
+      } else if(bprog > 0.25) {
+        bgg.addColorStop(0,'#ffaa00'); bgg.addColorStop(1,'#ffcc00');
+      } else {
+        bgg.addColorStop(0,'#ff2244'); bgg.addColorStop(1,'#ff6644');
+      }
+      ctx.shadowColor=bprog>0.5?'#22dd88':bprog>0.25?'#ffaa00':'#ff2244'; ctx.shadowBlur=6;
+      ctx.fillStyle=bgg;
+      ctx.beginPath();
+      const fillW=bbw*displayProg;
+      ctx.moveTo(bbx+bRadius,bby);ctx.lineTo(bbx+Math.max(fillW-bRadius,bRadius),bby);
+      if(fillW>=bbw-1){ctx.arcTo(bbx+bbw,bby,bbx+bbw,bby+bRadius,bRadius);ctx.arcTo(bbx+bbw,bby+bbh,bbx+bbw-bRadius,bby+bbh,bRadius);}
+      else{ctx.lineTo(bbx+fillW,bby);ctx.lineTo(bbx+fillW,bby+bbh);}
+      ctx.lineTo(bbx+bRadius,bby+bbh);
+      ctx.arcTo(bbx,bby+bbh,bbx,bby+bRadius,bRadius);
+      ctx.arcTo(bbx,bby,bbx+bRadius,bby,bRadius);
+      ctx.closePath();ctx.fill();
+      ctx.shadowBlur=0;
     }
+    // Boss name + HP text on bar
+    const bMeta = BOSS_META[G.boss.type] || BOSS_META.dragon;
+    const bossBarName = SAVE.customBossName || bMeta.name;
+    ctx.fillStyle='#fff';ctx.font=`bold ${Math.min(9,W*0.023)}px Arial`;
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.shadowColor='#000';ctx.shadowBlur=2;
+    ctx.fillText(`${bossBarName}  ${totalHp}/${maxHp}`, W/2, bby+bbh/2);
+    ctx.shadowBlur=0;
     ctx.restore();
   } else {
     ctx.fillStyle='#fff'; ctx.font=`bold ${Math.min(14,W*0.035)}px Arial`;
