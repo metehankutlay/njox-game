@@ -5204,7 +5204,7 @@ function drawIntroScreen() {
 
 function render() {
   ctx.clearRect(0,0,W,H);
-  if(G.phase==='intro') { drawIntroScreen(); return; }
+  if(G.phase==='intro') { drawIntroScreen(); drawShop(); return; }
   if(G.phase==='start'){drawStart();return;}
   if(G.phase==='map'){drawMapScreen();return;}
   if(G.phase==='result'){drawResultScreen();return;}
@@ -5371,6 +5371,34 @@ function checkPowerupTap(p) {
 }
 function onDown(e) {
   e.preventDefault();const p=getPos(e);
+  // Shop açıksa önce shop'u işle (her fazda çalışır)
+  if(G.shopOpen) {
+    const pw=Math.min(W-16,380), ph=Math.min(H*0.88,500);
+    const px=(W-pw)/2, py=(H-ph)/2;
+    if(p.x>=px+pw-32&&p.x<=px+pw-6&&p.y>=py+6&&p.y<=py+32){G.shopOpen=false;return;}
+    for(let i=0;i<SHOP_ITEMS.length;i++){
+      const it=SHOP_ITEMS[i];
+      const col=i%2, row=Math.floor(i/2);
+      const itemW=(pw-32)/2, itemH=72, itemGap=8, startY=py+60;
+      const ix=px+8+col*(itemW+itemGap), iy=startY+row*(itemH+itemGap);
+      if(p.x>=ix&&p.x<=ix+itemW&&p.y>=iy&&p.y<=iy+itemH){
+        if(G.gold>=it.cost){
+          const emptySlot=G.powerupSlots.indexOf(null);
+          if(emptySlot!==-1){
+            G.gold-=it.cost; SAVE.gold=G.gold; saveSave();
+            G.powerupSlots[emptySlot]={type:it.puType,pulse:0};
+            G.puActivateFlash[emptySlot]=180;
+            spawnParticles(W/2,H/2,it.color,18,true);
+            spawnFloater(W/2,H/2-30,it.emoji+' '+it.name+' ALINDI!',it.color);
+            G.shake=5; G.shopOpen=false;
+          } else { spawnFloater(W/2,H*0.55,'⚠️ Slot dolu!','#ff4444'); }
+        } else { spawnFloater(W/2,H*0.55,'💰 Yeterli altın yok!','#ff4444'); }
+        return;
+      }
+    }
+    if(p.x<px||p.x>px+pw||p.y<py||p.y>py+ph) G.shopOpen=false;
+    return;
+  }
   if(G.phase==='intro') {
     // BAŞLA butonu (draw ile senkron: H*0.68)
     const btnW=Math.min(W*0.55,200), btnH=50, btnX=W/2-btnW/2, btnY=H*0.68;
