@@ -4203,19 +4203,25 @@ function drawBossElements() {
 
 function drawShop() {
   if(!G.shopOpen) return;
-  const pw=Math.min(W-16, 380), ph=Math.min(H*0.92, 620);
+  if(G.shopScroll===undefined) G.shopScroll=0;
+  const pw=Math.min(W-16, 380), ph=Math.min(H*0.95, 700);
   const px=(W-pw)/2, py=(H-ph)/2;
+  const sc=G.shopScroll||0;
   ctx.save();
   // Karartma
-  ctx.fillStyle='rgba(0,0,15,0.78)'; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='rgba(0,0,15,0.82)'; ctx.fillRect(0,0,W,H);
   // Panel arka plan
-  ctx.shadowColor='#ffd700'; ctx.shadowBlur=22;
+  ctx.shadowColor='#ffd700'; ctx.shadowBlur=14;
   rrect(px,py,pw,ph,16);
   const bg=ctx.createLinearGradient(px,py,px,py+ph);
   bg.addColorStop(0,'rgba(12,12,34,0.98)'); bg.addColorStop(1,'rgba(8,8,24,0.98)');
   ctx.fillStyle=bg; ctx.fill();
   ctx.shadowBlur=0;
   ctx.strokeStyle='rgba(255,215,0,0.45)'; ctx.lineWidth=1.5; ctx.stroke();
+  // İçerik clip — scroll ile taşan kısmı gizle
+  ctx.save();
+  ctx.beginPath(); ctx.rect(px,py+44,pw,ph-52); ctx.clip();
+  ctx.translate(0,-sc); // scroll offset
 
   // Başlık
   ctx.textAlign='center'; ctx.textBaseline='middle';
@@ -4366,7 +4372,31 @@ function drawShop() {
       ctx.fillText('AKTİF', cx2+skCardW*0.65, cy2+skCardH*0.80);
     }
   }
-  ctx.restore();
+  ctx.restore(); // clip+translate restore
+
+  // Scroll bar göster
+  const shopRows99=Math.ceil(SHOP_ITEMS.length/2);
+  const skinRows99=Math.ceil(BALL_SKINS.length/2);
+  const totalContentH=60+shopRows99*(72+8)+12+34+skinRows99*(100+8)+20;
+  const visibleH=ph-52;
+  const maxScroll=Math.max(0,totalContentH-visibleH);
+  if(G.shopScroll===undefined) G.shopScroll=0;
+  G.shopScroll=Math.max(0,Math.min(G.shopScroll,maxScroll));
+  if(maxScroll>0){
+    const barH=Math.max(20,visibleH*(visibleH/totalContentH));
+    const barY=py+44+(visibleH-barH)*(sc/maxScroll);
+    ctx.fillStyle='rgba(255,215,0,0.3)';
+    rrect(px+pw-6,barY,4,barH,2); ctx.fill();
+  }
+
+  // Kapat butonu (scroll etkilemez — en üstte sabit)
+  ctx.fillStyle='rgba(255,255,255,0.15)';
+  rrect(px+pw-34,py+6,28,28,8); ctx.fill();
+  ctx.fillStyle='rgba(255,255,255,0.8)'; ctx.font='bold 16px Arial';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('✕', px+pw-20, py+20);
+
+  ctx.restore(); // drawShop ana restore
 }
 
 function hexToRgb(hex){
@@ -5613,51 +5643,54 @@ function onDown(e) {
   e.preventDefault();const p=getPos(e);
   // Shop açıksa önce shop'u işle (her fazda çalışır)
   if(G.shopOpen) {
-    const pw=Math.min(W-16,380), ph=Math.min(H*0.92,620);
+    _shopDragY=p.y; // scroll drag başlat
+    const pw=Math.min(W-16,380), ph=Math.min(H*0.95,700);
     const px=(W-pw)/2, py=(H-ph)/2;
-    if(p.x>=px+pw-32&&p.x<=px+pw-6&&p.y>=py+6&&p.y<=py+32){G.shopOpen=false;return;}
+    const sc=G.shopScroll||0;
+    // Kapat butonu (sabit)
+    if(p.x>=px+pw-38&&p.x<=px+pw-2&&p.y>=py+2&&p.y<=py+38){G.shopOpen=false;G.shopScroll=0;_shopDragY=null;return;}
+    // Dışarı tıklama
+    if(p.x<px||p.x>px+pw||p.y<py||p.y>py+ph){G.shopOpen=false;G.shopScroll=0;_shopDragY=null;return;}
+    // İçerik: scroll-adjusted pozisyonlar
     const itemW2=(pw-32)/2, itemH2=72, itemGap2=8, startY2=py+60;
     for(let i=0;i<SHOP_ITEMS.length;i++){
       const it=SHOP_ITEMS[i];
       const col=i%2, row=Math.floor(i/2);
-      const ix=px+8+col*(itemW2+itemGap2), iy=startY2+row*(itemH2+itemGap2);
-      if(p.x>=ix&&p.x<=ix+itemW2&&p.y>=iy&&p.y<=iy+itemH2){
+      const ix=px+8+col*(itemW2+itemGap2), iy=startY2+row*(itemH2+itemGap2)-sc;
+      if(p.x>=ix&&p.x<=ix+itemW2&&p.y>=iy&&p.y<=iy+itemH2&&p.y>py+44&&p.y<py+ph-8){
         if(G.gold>=it.cost){
-          const emptySlot=G.powerupSlots.indexOf(null);
-          if(emptySlot!==-1){
+          const es=G.powerupSlots.indexOf(null);
+          if(es!==-1){
             G.gold-=it.cost; SAVE.gold=G.gold; saveSave();
-            G.powerupSlots[emptySlot]={type:it.puType,pulse:0};
-            G.puActivateFlash[emptySlot]=180;
+            G.powerupSlots[es]={type:it.puType,pulse:0}; G.puActivateFlash[es]=180;
             spawnParticles(W/2,H/2,it.color,18,true);
             spawnFloater(W/2,H/2-30,it.emoji+' '+it.name+' ALINDI!',it.color);
-            G.shake=5; G.shopOpen=false;
+            G.shake=5;
           } else { spawnFloater(W/2,H*0.55,'⚠️ Slot dolu!','#ff4444'); }
         } else { spawnFloater(W/2,H*0.55,'💰 Yeterli altın yok!','#ff4444'); }
         return;
       }
     }
-    // Skin kartları tıklama
-    const shopRows2=Math.ceil(SHOP_ITEMS.length/2);
-    const skinStartY2=startY2+shopRows2*(itemH2+itemGap2)+12;
-    const skCardW2=(pw-32)/2, skCardH2=100, skCardGap2=8, skGridY2=skinStartY2+34;
+    // Skin kartları (scroll-adjusted)
+    const sr2=Math.ceil(SHOP_ITEMS.length/2);
+    const ssY2=startY2+sr2*(itemH2+itemGap2)+12;
+    const skW2=(pw-32)/2, skH2=100, skG2=8, sgY2=ssY2+34;
     for(let i=0;i<BALL_SKINS.length;i++){
       const sk=BALL_SKINS[i];
       const col=i%2, row=Math.floor(i/2);
-      const cx2=px+8+col*(skCardW2+skCardGap2);
-      const cy2=skGridY2+row*(skCardH2+skCardGap2);
-      if(p.x>=cx2&&p.x<=cx2+skCardW2&&p.y>=cy2&&p.y<=cy2+skCardH2){
-        const isUnlocked=(SAVE.unlockedSkins||['classic']).includes(sk.id);
-        if(isUnlocked){
+      const cx2=px+8+col*(skW2+skG2), cy2=sgY2+row*(skH2+skG2)-sc;
+      if(p.x>=cx2&&p.x<=cx2+skW2&&p.y>=cy2&&p.y<=cy2+skH2&&p.y>py+44&&p.y<py+ph-8){
+        const unlocked=(SAVE.unlockedSkins||['classic']).includes(sk.id);
+        if(unlocked){
           SAVE.ballSkin=sk.id; saveSave();
           spawnFloater(W/2,H/2-30,'✓ '+sk.name+' seçildi!','#00ffcc');
         } else {
-          showSkinUnlockOverlay(sk); G.shopOpen=false;
+          showSkinUnlockOverlay(sk);
         }
         return;
       }
     }
-    if(p.x<px||p.x>px+pw||p.y<py||p.y>py+ph) G.shopOpen=false;
-    return;
+    return; // panel içi boş alan — kapatma
   }
   if(G.phase==='intro') {
     // BAŞLA butonu (draw ile senkron: H*0.68)
@@ -5766,61 +5799,7 @@ function onDown(e) {
     }
   }
 
-  // Shop açık iken özel input
-  if(G.shopOpen) {
-    const pw=Math.min(W-16,380), ph=Math.min(H*0.92,620);
-    const px=(W-pw)/2, py=(H-ph)/2;
-    // Kapat butonu
-    if(p.x>=px+pw-32&&p.x<=px+pw-6&&p.y>=py+6&&p.y<=py+32){G.shopOpen=false;return;}
-    // Ürün satın alma
-    const itemW=(pw-32)/2, itemH=72, itemGap=8, startY=py+60;
-    for(let i=0;i<SHOP_ITEMS.length;i++){
-      const it=SHOP_ITEMS[i];
-      const col=i%2, row=Math.floor(i/2);
-      const ix=px+8+col*(itemW+itemGap), iy=startY+row*(itemH+itemGap);
-      if(p.x>=ix&&p.x<=ix+itemW&&p.y>=iy&&p.y<=iy+itemH){
-        if(G.gold>=it.cost){
-          const emptySlot=G.powerupSlots.indexOf(null);
-          if(emptySlot!==-1){
-            G.gold-=it.cost;
-            G.powerupSlots[emptySlot]={type:it.puType,pulse:0};
-            G.puActivateFlash[emptySlot] = 180;
-            spawnParticles(W/2,H/2,it.color,18,true);
-            spawnFloater(W/2,H/2-30,it.emoji+' '+it.name+' ALINDI!',it.color);
-            G.shake=5; G.shopOpen=false;
-          } else {
-            spawnFloater(W/2,H*0.55,'⚠️ Slot dolu! Önce kullan','#ff4444');
-          }
-        } else {
-          spawnFloater(W/2,H*0.55,'💰 Yeterli altın yok!','#ff4444');
-        }
-        return;
-      }
-    }
-    // Skin kartları tıklama
-    const shopRows3=Math.ceil(SHOP_ITEMS.length/2);
-    const skinStartY3=startY+shopRows3*(itemH+itemGap)+12;
-    const skCardW3=(pw-32)/2, skCardH3=100, skCardGap3=8, skGridY3=skinStartY3+34;
-    for(let i=0;i<BALL_SKINS.length;i++){
-      const sk=BALL_SKINS[i];
-      const col=i%2, row=Math.floor(i/2);
-      const cx3=px+8+col*(skCardW3+skCardGap3);
-      const cy3=skGridY3+row*(skCardH3+skCardGap3);
-      if(p.x>=cx3&&p.x<=cx3+skCardW3&&p.y>=cy3&&p.y<=cy3+skCardH3){
-        const isUnlocked=(SAVE.unlockedSkins||['classic']).includes(sk.id);
-        if(isUnlocked){
-          SAVE.ballSkin=sk.id; saveSave();
-          spawnFloater(W/2,H/2-30,'✓ '+sk.name+' seçildi!','#00ffcc');
-        } else {
-          showSkinUnlockOverlay(sk); G.shopOpen=false;
-        }
-        return;
-      }
-    }
-    // Dışarı tıklama: kapat
-    if(p.x<px||p.x>px+pw||p.y<py||p.y>py+ph) G.shopOpen=false;
-    return;
-  }
+  // (duplicate shop handler silindi — onDown başındaki tek handler yeterli)
   // Üst çubukta 🏪 MAĞAZA butonuna tıklama — her fazda çalışır
   if(p.y<TOP_H) {
     const {bx,by,bw,bh}=shopBtnRect();
@@ -5847,9 +5826,20 @@ function onDown(e) {
   if(G.phase!=='aim') return;
   touching=true;G.aimAngle=calcAngle(p.x,p.y);
 }
+let _shopDragY=null;
 function onMove(e) {
   e.preventDefault();
   const p=getPos(e);
+  // Shop scroll
+  if(G.shopOpen){
+    if(_shopDragY!==null){
+      const dy=_shopDragY-p.y;
+      if(G.shopScroll===undefined) G.shopScroll=0;
+      G.shopScroll=Math.max(0,G.shopScroll+dy);
+      _shopDragY=p.y;
+    } else { _shopDragY=p.y; }
+    return;
+  } else { _shopDragY=null; }
   if(G.phase==='map'&&MAP_DRAG_Y!==null){
     const dy=MAP_DRAG_Y-p.y;
     MAP_DRAG_VEL=dy*0.4;
