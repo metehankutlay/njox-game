@@ -1592,10 +1592,11 @@ function advanceTurn() {
   G.ballColor=G.nextColor; G.nextColor=rnd(COLORS.length);
   G.combo=0;
 
-  // Kalan tur floating text
-  const remaining = G.turnsPerLevel - G.levelTurns;
-  if(remaining > 0 && remaining <= G.turnsPerLevel) {
-    const turColor = remaining <= 3 ? '#ff4444' : remaining <= Math.ceil(G.turnsPerLevel/2) ? '#ffaa00' : '#44ff88';
+  // Kalan tur floating text — boss'ta boss.turnsLeft kullan
+  const remaining = (G.bossActive && G.boss) ? G.boss.turnsLeft : (G.turnsPerLevel - G.levelTurns);
+  const _tTotal = (G.bossActive && G.boss) ? 15 : G.turnsPerLevel;
+  if(remaining > 0 && remaining <= _tTotal) {
+    const turColor = remaining <= 3 ? '#ff4444' : remaining <= Math.ceil(_tTotal/2) ? '#ffaa00' : '#44ff88';
     spawnFloater(W/2, H*0.5, '\u23F3 ' + remaining + ' tur kald\u0131', turColor);
   }
 
@@ -4170,12 +4171,13 @@ function drawUI() {
   } else {
     ctx.fillStyle='#fff'; ctx.font=`bold ${Math.min(14,W*0.035)}px Arial`;
     ctx.textAlign='center'; ctx.fillText(`Bölüm ${G.level}`, W/2, TOP_H/2-12);
-    // Tur sayacı: büyük pill badge + renk kodlu
-    const turRemain = G.turnsPerLevel - G.levelTurns;
-    const turRatio = turRemain / G.turnsPerLevel;
+    // Tur sayacı: büyük pill badge + renk kodlu — boss'ta boss.turnsLeft kullan
+    const turRemain = (G.bossActive && G.boss) ? G.boss.turnsLeft : (G.turnsPerLevel - G.levelTurns);
+    const _turTotal = (G.bossActive && G.boss) ? 15 : G.turnsPerLevel;
+    const turRatio = turRemain / _turTotal;
     const turCol = turRatio > 0.5 ? '#44ff88' : turRatio > 0.25 ? '#ffcc00' : '#ff4444';
     const turBg  = turRatio > 0.5 ? 'rgba(68,255,136,0.18)' : turRatio > 0.25 ? 'rgba(255,204,0,0.18)' : 'rgba(255,68,68,0.22)';
-    const turStr=`\u23F3 ${turRemain} / ${G.turnsPerLevel} tur`;
+    const turStr=`\u23F3 ${turRemain} / ${_turTotal} tur`;
     const turFont = Math.min(13,W*0.033);
     ctx.font=`bold ${turFont}px Arial`;
     const turTW = ctx.measureText(turStr).width;
@@ -5253,7 +5255,8 @@ function render() {
   }
   // ── SON ATIŞ countdown warning (last 5 turns) ──────────────
   {
-    const _rem = G.turnsPerLevel - G.levelTurns;
+    // Boss bölümlerinde boss.turnsLeft kullan, normal bölümlerde turnsPerLevel - levelTurns
+    const _rem = (G.bossActive && G.boss) ? G.boss.turnsLeft : (G.turnsPerLevel - G.levelTurns);
     if(_rem > 0 && _rem <= 5 && !G.bossJustDefeated && (G.phase==='aim'||G.phase==='shoot'||G.phase==='fall')) {
       ctx.save();
       const pulse = 0.55 + 0.45 * Math.abs(Math.sin(frame * 0.1));
