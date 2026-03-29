@@ -4785,7 +4785,7 @@ function drawIntroScreen() {
   ctx.fillText('the Game', W/2, subTitleY);
   ctx.restore();
 
-  // "Stresini Kır!" — şık, cesur
+  // "Kill the Stress!" — şık, cesur
   const stressY = subTitleY + Math.min(28, H*0.042);
   ctx.save();
   ctx.textAlign='center'; ctx.textBaseline='middle';
@@ -4794,7 +4794,7 @@ function drawIntroScreen() {
   sg.addColorStop(0,'#ff5588'); sg.addColorStop(0.5,'#ffaa00'); sg.addColorStop(1,'#ff5588');
   ctx.shadowColor='#ff3366'; ctx.shadowBlur=14+Math.sin(frame*0.05)*5;
   ctx.fillStyle=sg;
-  ctx.fillText('😤 Stresini Kır!', W/2, stressY);
+  ctx.fillText('Kill the Stress! 😤', W/2, stressY);
   ctx.restore();
 
   // ── Top Pazarı ───────────────────────────────────────────────
@@ -4925,6 +4925,39 @@ function render() {
       ctx.restore();
     }
   }
+  // ── SON ATIŞ countdown warning (last 5 turns) ──────────────
+  {
+    const _rem = G.turnsPerLevel - G.levelTurns;
+    if(_rem > 0 && _rem <= 5 && (G.phase==='aim'||G.phase==='shoot'||G.phase==='fall')) {
+      ctx.save();
+      const pulse = 0.55 + 0.45 * Math.abs(Math.sin(frame * 0.1));
+      const warnFont = Math.min(36, W * 0.085);
+      const warnText = _rem === 1 ? 'SON ATIŞ!' : 'SON ' + _rem + ' ATIŞ!';
+      const warnY = H * 0.50;
+      // dark background pill
+      ctx.globalAlpha = pulse * 0.55;
+      const tw = ctx.measureText('M').width * warnText.length * 0.65 + 40;
+      const th = warnFont + 20;
+      ctx.fillStyle = 'rgba(0,0,0,0.65)';
+      ctx.beginPath();
+      const rx = W/2 - tw/2, ry = warnY - th/2, rr = th/2;
+      ctx.moveTo(rx+rr, ry); ctx.lineTo(rx+tw-rr, ry);
+      ctx.arc(rx+tw-rr, ry+rr, rr, -Math.PI/2, Math.PI/2);
+      ctx.lineTo(rx+rr, ry+th);
+      ctx.arc(rx+rr, ry+rr, rr, Math.PI/2, -Math.PI/2);
+      ctx.closePath(); ctx.fill();
+      // glowing text
+      ctx.globalAlpha = pulse;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = `bold ${warnFont}px Arial`;
+      ctx.shadowColor = '#ff6600'; ctx.shadowBlur = 18 + Math.sin(frame*0.15)*8;
+      ctx.fillStyle = '#ff2222';
+      ctx.fillText(warnText, W/2, warnY);
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    }
+  }
+
   if(G.bossIntro > 0) drawBossIntro();
   // Boss altın toplama geri sayımı
   if(G.bossCollectTimer > 0) {
