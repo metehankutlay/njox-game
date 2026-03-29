@@ -650,8 +650,8 @@ function openLuckyBox(auto=false) {
   // Güç ekle
   if(reward.pu !== null && reward.pu !== undefined) {
     const slotIdx = G.powerupSlots.indexOf(null);
-    if(slotIdx >= 0) G.powerupSlots[slotIdx] = {type:reward.pu, pulse:0};
-    else G.powerupSlots[1] = {type:reward.pu, pulse:0};
+    if(slotIdx >= 0) { G.powerupSlots[slotIdx] = {type:reward.pu, pulse:0}; G.puActivateFlash[slotIdx] = 180; }
+    else { G.powerupSlots[1] = {type:reward.pu, pulse:0}; G.puActivateFlash[1] = 180; }
   }
   // Floater + partikül
   spawnFloater(W/2, H*0.40, `${t.label} +${reward.gold}💰`, t.color);
@@ -920,6 +920,7 @@ function startLevel(n) {
     fallProg:0, over:false,
     powerupSlots:[null,null],
     activePowerup:null, bombUsedThisTurn:false, shake:0,
+    fireballOfferTimer:0, puActivateFlash:[0,0],
     levelTurns:0, turnsPerLevel:cfg.turnsAllowed,
     scoreMultiplier:3.0, blocksKilledThisLevel:0,
     bossActive:false, boss:null,
@@ -1006,6 +1007,7 @@ function initGame() {
     fallProg:0, over:false,
     powerupSlots:[null,null],
     activePowerup:null, bombUsedThisTurn:false, shake:0,
+    fireballOfferTimer:0, puActivateFlash:[0,0],
     levelTurns:0, turnsPerLevel:10,
     scoreMultiplier:3.0, blocksKilledThisLevel:0,
     bossActive:false, boss:null,
@@ -1608,6 +1610,15 @@ function advanceTurn() {
     }
   }
 
+  // ── Fireball teklifi — her 3 turda, slotta ateş topu yoksa ──
+  if(G.turn % 3 === 0 && !G.bossActive) {
+    const hasFireball = G.powerupSlots.some(s => s && s.type === PU_FIREBALL);
+    const hasEmptySlot = G.powerupSlots.some(s => s === null);
+    if(!hasFireball && hasEmptySlot && G.gold >= 20) {
+      G.fireballOfferTimer = 180; // ~3 saniye (60fps)
+    }
+  }
+
   G.phase='fall'; G.fallProg=0;
 }
 
@@ -1644,6 +1655,8 @@ function update() {
   for(const b of G.grid) if(b.shake>0) b.shake--;
   for(const co of G.collectors) co.pulse=(co.pulse+0.08)%(Math.PI*2);
   for(const pu of G.powerupSlots) if(pu) pu.pulse=(pu.pulse+0.06)%(Math.PI*2);
+  if(G.fireballOfferTimer > 0) G.fireballOfferTimer--;
+  for(let i=0;i<2;i++) if(G.puActivateFlash[i]>0) G.puActivateFlash[i]--;
   if(G.bossActive&&G.boss) {
     const boss=G.boss;
     // ── Yılan sürekli hareketi ──────────────────────────────
@@ -2984,6 +2997,20 @@ function drawPowerupBar() {
       ctx.fillStyle='rgba(170,185,220,0.55)';
       ctx.fillText(PU_DESC[pu.type], sx, slotY+R+16);
 
+      // Yeni satın alındıysa "👆 AKTİF ET" pulsing etiketi
+      if(!isActive && G.puActivateFlash[i] > 0) {
+        const flashAlpha = Math.min(1, G.puActivateFlash[i] / 30) * (0.6 + 0.4 * Math.sin(frame * 0.2));
+        ctx.globalAlpha = flashAlpha;
+        ctx.font = `bold ${Math.min(12, W*0.03)}px Arial`;
+        ctx.fillStyle = '#ffd700';
+        ctx.shadowColor = '#ffd700';
+        ctx.shadowBlur = 10;
+        ctx.textBaseline = 'bottom';
+        ctx.fillText('👆 AKTİF ET', sx, slotY - R - 4);
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+      }
+
       // Aktifse üstte belirgin "◀ ATEŞLE!" etiketi
       if(isActive) {
         const pulse = 0.7+0.3*Math.sin(frame*0.18);
@@ -2996,27 +3023,86 @@ function drawPowerupBar() {
         ctx.globalAlpha=1; ctx.shadowBlur=0;
       }
     } else {
-      // ── Boş slot — mağaza yönlendirmesi ─────────────────────────
-      ctx.globalAlpha = 0.45;
+      // ── Boş slot — önerilen güç-up ile renkli buton ──────────────
+      // Sıradaki öneri: slot 0 → Bomba (ucuz), slot 1 → Ateş Topu
+      const suggest = i === 0
+        ? {emoji:'💣', cost:15, color:'#ff9800', label:'Bomba'}
+        : {emoji:'🔥', cost:20, color:'#ff3d5a', label:'Ateş'};
+      const glowPulse = 0.3 + 0.15 * Math.sin(frame * 0.1 + i * 1.5);
+
+      ctx.globalAlpha = 0.65;
+      // Renkli kenarlık glow
+      ctx.shadowColor = suggest.color;
+      ctx.shadowBlur = 8 + 4 * Math.sin(frame * 0.08);
       ctx.beginPath(); ctx.arc(sx, slotY, PU_SLOT_R, 0, Math.PI*2);
-      ctx.fillStyle='rgba(30,30,60,0.80)'; ctx.fill();
-      ctx.strokeStyle='rgba(150,150,220,0.25)'; ctx.lineWidth=1.5; ctx.stroke();
+      ctx.fillStyle='rgba(30,30,60,0.85)'; ctx.fill();
+      ctx.strokeStyle = suggest.color + '88';
+      ctx.lineWidth = 2; ctx.stroke();
+      ctx.shadowBlur = 0;
 
-      // Büyük + ikon
-      ctx.fillStyle='rgba(200,210,255,0.50)';
-      ctx.font=`${Math.round(PU_SLOT_R*0.95)}px Arial`;
+      // Emoji ikon
+      ctx.font=`${Math.round(PU_SLOT_R*0.85)}px serif`;
       ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText('＋', sx, slotY);
+      ctx.fillText(suggest.emoji, sx, slotY - 3);
 
-      ctx.globalAlpha = 0.55;
+      // Fiyat etiketi (altın)
+      ctx.font=`bold ${Math.min(11,W*0.028)}px Arial`;
+      ctx.fillStyle = suggest.color;
+      ctx.fillText(suggest.cost+'g', sx, slotY + PU_SLOT_R * 0.65);
+
+      // Alt metin
+      ctx.globalAlpha = 0.7;
       ctx.font=`bold ${Math.min(10,W*0.025)}px Arial`;
-      ctx.fillStyle='#aabbdd';
+      ctx.fillStyle='#ddeeff';
       ctx.textBaseline='top';
-      ctx.fillText('🏪 Satın Al', sx, slotY+PU_SLOT_R+3);
+      ctx.fillText('🏪 ' + suggest.label, sx, slotY+PU_SLOT_R+3);
       ctx.globalAlpha=1;
     }
     ctx.restore();
   }
+}
+
+function drawFireballOffer() {
+  if(G.fireballOfferTimer <= 0) return;
+  const alpha = Math.min(1, G.fireballOfferTimer / 30); // fade out son 0.5sn
+  const pulse = 0.85 + 0.15 * Math.sin(frame * 0.15);
+  const bannerW = Math.min(260, W * 0.72);
+  const bannerH = 54;
+  const bx = W/2 - bannerW/2;
+  const bannerY = H * 0.32;
+
+  ctx.save();
+  ctx.globalAlpha = alpha * pulse;
+
+  // Banner arka plan
+  ctx.shadowColor = '#ff3d5a';
+  ctx.shadowBlur = 20;
+  rrect(bx, bannerY, bannerW, bannerH, 14);
+  const grad = ctx.createLinearGradient(bx, bannerY, bx + bannerW, bannerY);
+  grad.addColorStop(0, 'rgba(180,20,40,0.92)');
+  grad.addColorStop(0.5, 'rgba(255,60,90,0.95)');
+  grad.addColorStop(1, 'rgba(180,20,40,0.92)');
+  ctx.fillStyle = grad;
+  ctx.fill();
+  ctx.strokeStyle = '#ff8866';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Emoji + metin
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#fff';
+  ctx.font = `bold ${Math.min(17, W*0.043)}px Arial`;
+  ctx.fillText('🔥 Ateşli Top — 20 altın', W/2, bannerY + bannerH * 0.38);
+
+  // Alt bilgi
+  ctx.font = `${Math.min(12, W*0.03)}px Arial`;
+  ctx.fillStyle = '#ffddaa';
+  ctx.fillText('👆 Dokun veya 🏪 Mağaza\'dan al', W/2, bannerY + bannerH * 0.72);
+
+  ctx.globalAlpha = 1;
+  ctx.restore();
 }
 
 function drawProgressBar() {
@@ -3984,6 +4070,7 @@ function drawUI() {
 
   // Power-up slotları (merkez)
   drawPowerupBar();
+  drawFireballOffer();
 
   // BallBuff göstergesi — sağ alt, hız butonunun altında
   if(G.ballBuff && G.ballBuff.turnsLeft > 0) {
@@ -5006,10 +5093,16 @@ function checkPowerupTap(p) {
         // Dolu: aktifleştir/iptal et
         const wasActive = G.activePowerup===i;
         G.activePowerup = wasActive ? null : i;
-        spawnFloater(sx, slotY-48,
-          wasActive ? '✖ İPTAL' : PU_EMOJI[pu.type]+' '+PU_LABEL[pu.type]+' AKTİF!',
-          wasActive ? '#888' : PU_COLOR[pu.type]);
-        G.shake = wasActive?0:5;
+        if(!wasActive) {
+          // Büyük merkez floater + parçacıklar + sarsıntı
+          spawnFloater(W/2, H*0.38, PU_EMOJI[pu.type]+' '+PU_LABEL[pu.type]+' AKTİF!', PU_COLOR[pu.type]);
+          spawnParticles(sx, slotY, PU_COLOR[pu.type], 14, true);
+          G.shake = 8;
+          G.puActivateFlash[i] = 0; // flash'ı kapat
+        } else {
+          spawnFloater(sx, slotY-48, '✖ İPTAL', '#888');
+          G.shake = 0;
+        }
       } else {
         // Boş: mağazayı aç
         G.shopOpen = true;
@@ -5107,6 +5200,33 @@ function onDown(e) {
     return;
   }
   if(G.over){ initGame(); return; }
+  // ── Fireball teklifi tıklama ──
+  if(G.fireballOfferTimer > 0) {
+    const bannerW = Math.min(260, W * 0.72);
+    const bannerY = H * 0.32;
+    const bannerH = 54;
+    const bx2 = W/2 - bannerW/2;
+    if(p.x >= bx2 && p.x <= bx2 + bannerW && p.y >= bannerY && p.y <= bannerY + bannerH) {
+      if(G.gold >= 20) {
+        const emptySlot = G.powerupSlots.indexOf(null);
+        if(emptySlot !== -1) {
+          G.gold -= 20;
+          G.powerupSlots[emptySlot] = {type: PU_FIREBALL, pulse: 0};
+          G.puActivateFlash[emptySlot] = 180;
+          spawnParticles(W/2, H/2, '#ff3d5a', 22, true);
+          spawnFloater(W/2, H*0.28, '🔥 Ateş Topu ALINDI!', '#ff3d5a');
+          G.shake = 6;
+          G.fireballOfferTimer = 0;
+        } else {
+          spawnFloater(W/2, H*0.4, '⚠️ Slot dolu!', '#ff4444');
+        }
+      } else {
+        spawnFloater(W/2, H*0.4, '💰 Yeterli altın yok!', '#ff4444');
+      }
+      return;
+    }
+  }
+
   // Shop açık iken özel input
   if(G.shopOpen) {
     const pw=Math.min(W-16,380), ph=Math.min(H*0.88,500);
@@ -5125,6 +5245,7 @@ function onDown(e) {
           if(emptySlot!==-1){
             G.gold-=it.cost;
             G.powerupSlots[emptySlot]={type:it.puType,pulse:0};
+            G.puActivateFlash[emptySlot] = 180; // 3sn pulsing "AKTİF ET"
             spawnParticles(W/2,H/2,it.color,18,true);
             spawnFloater(W/2,H/2-30,it.emoji+' '+it.name+' ALINDI!',it.color);
             G.shake=5; G.shopOpen=false;
