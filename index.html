@@ -4171,8 +4171,9 @@ function drawUI() {
   } else {
     ctx.fillStyle='#fff'; ctx.font=`bold ${Math.min(14,W*0.035)}px Arial`;
     ctx.textAlign='center'; ctx.fillText(`Bölüm ${G.level}`, W/2, TOP_H/2-12);
-    // Tur sayacı: büyük pill badge + renk kodlu — boss'ta boss.turnsLeft kullan
-    const turRemain = (G.bossActive && G.boss) ? G.boss.turnsLeft : (G.turnsPerLevel - G.levelTurns);
+    // Tur sayacı: büyük pill badge + renk kodlu — boss'ta boss.turnsLeft, toplama fazında gizle
+    if(G.bossCollectTimer > 0) { /* boss yenildi, coin toplama — sayaç gösterme */ }
+    const turRemain = (G.bossActive && G.boss) ? G.boss.turnsLeft : (G.bossCollectTimer > 0 ? 0 : (G.turnsPerLevel - G.levelTurns));
     const _turTotal = (G.bossActive && G.boss) ? 15 : G.turnsPerLevel;
     const turRatio = turRemain / _turTotal;
     const turCol = turRatio > 0.5 ? '#44ff88' : turRatio > 0.25 ? '#ffcc00' : '#ff4444';
@@ -5257,7 +5258,7 @@ function render() {
   {
     // Boss bölümlerinde boss.turnsLeft kullan, normal bölümlerde turnsPerLevel - levelTurns
     const _rem = (G.bossActive && G.boss) ? G.boss.turnsLeft : (G.turnsPerLevel - G.levelTurns);
-    if(_rem > 0 && _rem <= 5 && !G.bossJustDefeated && (G.phase==='aim'||G.phase==='shoot'||G.phase==='fall')) {
+    if(_rem > 0 && _rem <= 5 && !G.bossJustDefeated && G.bossCollectTimer <= 0 && (G.phase==='aim'||G.phase==='shoot'||G.phase==='fall')) {
       ctx.save();
       const pulse = 0.55 + 0.45 * Math.abs(Math.sin(frame * 0.1));
       // Pulsing scale animasyonu (0.95x — 1.05x)
