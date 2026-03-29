@@ -5146,59 +5146,7 @@ function drawStart() {
     ctx.restore();
   }
 
-  // ── NJOX logo ─────────────────────────────────────────────────
-  const logoY    = H*0.22;
-  const logoSize = Math.min(82, W*0.19);
-  ctx.save();
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.font = `900 ${logoSize}px Arial`;
-
-  // Thick dark outline for depth
-  ctx.lineWidth = 9;
-  ctx.strokeStyle = 'rgba(0,0,16,0.95)';
-  ctx.strokeText('NJOX', W/2, logoY);
-
-  // Gradient fill: cyan → white → purple → pink
-  const lg = ctx.createLinearGradient(W/2-logoSize*2.1, logoY-logoSize*0.5,
-                                       W/2+logoSize*2.1, logoY+logoSize*0.5);
-  lg.addColorStop(0,    '#22eeff');
-  lg.addColorStop(0.30, '#ffffff');
-  lg.addColorStop(0.65, '#cc66ff');
-  lg.addColorStop(1,    '#ff44bb');
-  ctx.shadowColor = '#33bbff';
-  ctx.shadowBlur  = 28 + Math.sin(frame*0.055)*10;
-  ctx.fillStyle   = lg;
-  ctx.fillText('NJOX', W/2, logoY);
-
-  // Subtle highlight pass
-  ctx.globalAlpha = 0.18 + 0.10*Math.sin(frame*0.06);
-  ctx.shadowBlur  = 0;
-  ctx.fillStyle   = '#ffffff';
-  ctx.fillText('NJOX', W/2, logoY);
-  ctx.restore();
-
-  // Tagline
-  ctx.save();
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.shadowColor = '#33aaff'; ctx.shadowBlur = 10;
-  ctx.fillStyle = 'rgba(160,210,255,0.72)';
-  ctx.font = `${Math.min(13,W*0.033)}px Arial`;
-  ctx.fillText('Block  •  Crush  •  Conquer', W/2, logoY + logoSize*0.64 + 14);
-  ctx.restore();
-
-  // Decorative divider line
-  ctx.save();
-  ctx.globalAlpha = 0.28;
-  const lineY = H*0.385;
-  const lineG = ctx.createLinearGradient(W*0.08,lineY, W*0.92,lineY);
-  lineG.addColorStop(0,   'transparent');
-  lineG.addColorStop(0.2, '#22ccff');
-  lineG.addColorStop(0.5, '#ffffff');
-  lineG.addColorStop(0.8, '#ff44cc');
-  lineG.addColorStop(1,   'transparent');
-  ctx.strokeStyle = lineG; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(W*0.08,lineY); ctx.lineTo(W*0.92,lineY); ctx.stroke();
-  ctx.restore();
+  // (eski NJOX logo + tagline + divider silindi — aşağıda yeni versiyon var)
 
   // ── 3 feature cards ───────────────────────────────────────────
   const cards = [
