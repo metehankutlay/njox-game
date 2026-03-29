@@ -1623,12 +1623,12 @@ function advanceTurn() {
     }
   }
 
-  // ── Fireball teklifi — her 3 turda, slotta ateş topu yoksa ──
-  if(G.turn % 3 === 0 && !G.bossActive) {
+  // ── Fireball teklifi — her 8 turda, slotta ateş topu yoksa (az sıklıkta) ──
+  if(G.turn % 8 === 0 && G.turn > 0 && !G.bossActive) {
     const hasFireball = G.powerupSlots.some(s => s && s.type === PU_FIREBALL);
     const hasEmptySlot = G.powerupSlots.some(s => s === null);
     if(!hasFireball && hasEmptySlot && G.gold >= 20) {
-      G.fireballOfferTimer = 180; // ~3 saniye (60fps)
+      G.fireballOfferTimer = 120; // ~2 saniye (60fps)
     }
   }
 
@@ -5536,7 +5536,7 @@ function render() {
   {
     // Boss bölümlerinde boss.turnsLeft kullan, normal bölümlerde turnsPerLevel - levelTurns
     const _rem = (G.bossActive && G.boss) ? G.boss.turnsLeft : (G.turnsPerLevel - G.levelTurns);
-    if(_rem > 0 && _rem <= 5 && !G.bossJustDefeated && G.bossCollectTimer <= 0 && (G.phase==='aim'||G.phase==='shoot'||G.phase==='fall')) {
+    if(_rem > 0 && _rem <= 5 && !G.bossJustDefeated && G.bossCollectTimer <= 0 && G.phase==='aim') {
       ctx.save();
       const pulse = 0.55 + 0.45 * Math.abs(Math.sin(frame * 0.1));
       // Pulsing scale animasyonu (0.95x — 1.05x)
