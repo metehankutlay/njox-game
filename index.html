@@ -159,16 +159,13 @@ loadAllSprites();
 let COLS = 20; // resize() içinde dinamik hesaplanır
 const GAP = 1, BALL_R = 6, BALL_SPD = 14;
 
-// Performans: mobilde gölge efektlerini kapat (shadowBlur çok ağır)
+// Performans: mobilde aşırı büyük gölgeleri sınırla (shadowBlur>15 çok ağır)
 const IS_MOBILE = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) || (window.innerWidth < 600 && 'ontouchstart' in window);
-const LOW_FX = IS_MOBILE; // true ise gölge efektleri azaltılır
-
-// shadowBlur proxy: mobilde shadowBlur'u sıfırla veya azalt
-const _origShadowBlurDesc = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'shadowBlur');
-if(LOW_FX && _origShadowBlurDesc) {
+const _origSBDesc = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'shadowBlur');
+if(IS_MOBILE && _origSBDesc) {
   Object.defineProperty(CanvasRenderingContext2D.prototype, 'shadowBlur', {
-    get() { return _origShadowBlurDesc.get.call(this); },
-    set(v) { _origShadowBlurDesc.set.call(this, Math.min(v * 0.3, 6)); }, // max 6px, %30 yoğunluk
+    get() { return _origSBDesc.get.call(this); },
+    set(v) { _origSBDesc.set.call(this, Math.min(v, 14)); }, // max 14px — görsel korunur, performans artar
     configurable: true
   });
 }
