@@ -4339,179 +4339,269 @@ function mapPlayBtnRect() {
 }
 
 function drawMapScreen() {
-  // ── Arka plan ──────────────────────────────────────────────────
+  // ── Background with vertical gradient ──────────────────────────
   const bg=ctx.createLinearGradient(0,0,0,H);
-  bg.addColorStop(0,'#050514'); bg.addColorStop(0.5,'#080828'); bg.addColorStop(1,'#040412');
+  bg.addColorStop(0,'#030012'); bg.addColorStop(0.4,'#0a0030'); bg.addColorStop(0.7,'#120040'); bg.addColorStop(1,'#1a0050');
   ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
 
-  // Hafif yıldız zemin
+  // Subtle star field
   ctx.save();
   for(const s of bgStars){
-    const a=0.25+0.2*Math.sin(s.phase+frame*s.speed);
+    const a=0.18+0.15*Math.sin(s.phase+frame*s.speed);
     ctx.globalAlpha=a;
-    ctx.fillStyle='#fff';
+    ctx.fillStyle=s.r>0.8?'#ccaaff':'#fff';
     ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2); ctx.fill();
   }
   ctx.restore();
 
-  // ── Bağlantı çizgileri (sadece kilitli/açık, sade) ─────────────
+  // ── Golden bezier path connecting nodes ─────────────────────────
   for(let n=1;n<MAP_TOTAL;n++){
     const a=mapNodePos(n), b=mapNodePos(n+1);
-    if(a.y<MAP_TOP_H-20&&b.y<MAP_TOP_H-20) continue;
-    if(a.y>H-MAP_BOT_H+20&&b.y>H-MAP_BOT_H+20) continue;
+    if(a.y<MAP_TOP_H-40&&b.y<MAP_TOP_H-40) continue;
+    if(a.y>H-MAP_BOT_H+40&&b.y>H-MAP_BOT_H+40) continue;
     const done=n<SAVE.level;
+    const midX=(a.x+b.x)/2, midY=(a.y+b.y)/2;
+    // Offset control point for curvy path
+    const cpx = midX + (a.x<b.x ? -20 : 20);
     ctx.save();
-    if(!done) ctx.setLineDash([5,6]);
-    ctx.strokeStyle=done?'rgba(255,215,0,0.30)':'rgba(70,70,110,0.30)';
-    ctx.lineWidth=done?2:1.2;
-    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(a.x,a.y);
+    ctx.quadraticCurveTo(cpx, midY, b.x, b.y);
+    if(done){
+      const pathGrad=ctx.createLinearGradient(a.x,a.y,b.x,b.y);
+      pathGrad.addColorStop(0,'rgba(255,215,0,0.45)');
+      pathGrad.addColorStop(1,'rgba(255,180,0,0.35)');
+      ctx.strokeStyle=pathGrad;
+      ctx.lineWidth=3;
+      ctx.shadowColor='#ffd700'; ctx.shadowBlur=6;
+    } else {
+      ctx.setLineDash([4,8]);
+      ctx.strokeStyle='rgba(100,80,160,0.35)';
+      ctx.lineWidth=1.5;
+    }
+    ctx.stroke();
     ctx.restore();
   }
 
-  // ── Düğümler ───────────────────────────────────────────────────
+  // ── Draw decorative dots along completed path ───────────────────
+  for(let n=1;n<Math.min(SAVE.level,MAP_TOTAL);n++){
+    const a=mapNodePos(n), b=mapNodePos(n+1);
+    if(a.y<MAP_TOP_H-40&&b.y<MAP_TOP_H-40) continue;
+    if(a.y>H-MAP_BOT_H+40&&b.y>H-MAP_BOT_H+40) continue;
+    ctx.save(); ctx.globalAlpha=0.3;
+    for(let t=0.2;t<=0.8;t+=0.3){
+      const cpx=(a.x+b.x)/2+(a.x<b.x?-20:20);
+      const px=(1-t)*(1-t)*a.x+2*(1-t)*t*cpx+t*t*b.x;
+      const py=(1-t)*(1-t)*a.y+2*(1-t)*t*((a.y+b.y)/2)+t*t*b.y;
+      ctx.fillStyle='#ffd700';
+      ctx.beginPath(); ctx.arc(px,py,1.5,0,Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // ── Level nodes ─────────────────────────────────────────────────
   for(let n=1;n<=MAP_TOTAL;n++){
     const pos=mapNodePos(n);
-    if(pos.y < MAP_TOP_H-30 || pos.y > H-MAP_BOT_H+30) continue;
+    if(pos.y < MAP_TOP_H-35 || pos.y > H-MAP_BOT_H+35) continue;
     const cfg=makeLevelConfig(n);
     const unlocked=n<=SAVE.level;
     const done=n<SAVE.level;
     const stars=SAVE.stars[n]||0;
     const isCurrent=n===SAVE.level;
-    const r = cfg.isBoss ? MAP_NODE_R+5 : MAP_NODE_R;
+    const isBoss=cfg.isBoss;
+    const baseR = isBoss ? MAP_NODE_R+6 : MAP_NODE_R;
+    const r = isCurrent ? baseR+3 : !unlocked ? baseR-3 : baseR;
 
     ctx.save();
 
-    // Glow
+    // Outer glow
     if(isCurrent){
-      ctx.shadowColor=cfg.isBoss?'#ff2244':cfg.isIceWorld?'#66eeff':'#22ffcc';
-      ctx.shadowBlur=22;
-    } else if(unlocked){
-      ctx.shadowColor=cfg.isBoss?'#cc1122':cfg.isIceWorld?'#4499cc':'#2255cc';
-      ctx.shadowBlur=8;
+      ctx.shadowColor=isBoss?'#ff3355':'#00ccff';
+      ctx.shadowBlur=28+Math.sin(frame*0.08)*8;
+    } else if(done){
+      ctx.shadowColor='#ffd700'; ctx.shadowBlur=8;
     }
 
-    // Daire
+    // Node circle fill
     ctx.beginPath(); ctx.arc(pos.x,pos.y,r,0,Math.PI*2);
-    const gr=ctx.createRadialGradient(pos.x-r*0.25,pos.y-r*0.3,0,pos.x,pos.y,r);
+    const gr=ctx.createRadialGradient(pos.x-r*0.3,pos.y-r*0.35,0,pos.x,pos.y,r);
     if(!unlocked){
-      gr.addColorStop(0,'#252540'); gr.addColorStop(1,'#111122');
-    } else if(cfg.isBoss){
-      gr.addColorStop(0,isCurrent?'#ff7799':'#cc3355'); gr.addColorStop(1,'#550011');
-    } else if(cfg.isIceWorld){
-      gr.addColorStop(0,isCurrent?'#99eeff':'#55aadd'); gr.addColorStop(1,'#0a2240');
+      gr.addColorStop(0,'#1a1a30'); gr.addColorStop(1,'#0a0a18');
+    } else if(isBoss && isCurrent){
+      gr.addColorStop(0,'#ff5577'); gr.addColorStop(0.7,'#aa1133'); gr.addColorStop(1,'#550015');
+    } else if(isBoss && done){
+      gr.addColorStop(0,'#cc4466'); gr.addColorStop(1,'#441122');
+    } else if(isCurrent){
+      gr.addColorStop(0,'#33ccff'); gr.addColorStop(0.6,'#1188cc'); gr.addColorStop(1,'#0a4466');
     } else if(done){
-      gr.addColorStop(0,'#335599'); gr.addColorStop(1,'#0d1e44');
+      gr.addColorStop(0,'#44aa55'); gr.addColorStop(0.7,'#227733'); gr.addColorStop(1,'#0d3318');
     } else {
-      gr.addColorStop(0,'#44aaff'); gr.addColorStop(1,'#0d2255');
+      gr.addColorStop(0,'#1a1a30'); gr.addColorStop(1,'#0a0a18');
     }
     ctx.fillStyle=gr; ctx.fill();
 
-    // Kenarlık
-    const strokeClr = !unlocked ? 'rgba(80,80,120,0.4)'
-      : cfg.isBoss    ? (isCurrent?'#ff6688':'rgba(200,50,80,0.7)')
-      : cfg.isIceWorld? (isCurrent?'#aaeeff':'rgba(80,200,255,0.5)')
-      : isCurrent     ? '#55ffcc'
-      : 'rgba(80,140,255,0.4)';
-    ctx.strokeStyle=strokeClr; ctx.lineWidth=isCurrent?2.5:1.2; ctx.stroke();
+    // Border ring
+    ctx.lineWidth = isCurrent ? 2.5 : done ? 1.8 : 1;
+    if(!unlocked) ctx.strokeStyle='rgba(60,50,100,0.4)';
+    else if(isBoss) ctx.strokeStyle=isCurrent?'#ff6688':'#cc3355';
+    else if(isCurrent) ctx.strokeStyle='#00eeff';
+    else if(done) ctx.strokeStyle='rgba(255,215,0,0.6)';
+    else ctx.strokeStyle='rgba(60,50,100,0.4)';
+    ctx.stroke();
     ctx.shadowBlur=0;
 
-    // İçerik
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    if(!unlocked){
-      ctx.font=`${Math.round(r*0.72)}px serif`;
-      ctx.globalAlpha=0.55;
-      ctx.fillText('🔒',pos.x,pos.y);
-    } else {
-      // Arka plan ikonu (boss/ice)
-      if(cfg.isBoss){
-        // Boss tipi emojisi
-        const bMeta = BOSS_META[cfg.bossType] || BOSS_META.yassi_yilan;
-        ctx.font=`${Math.round(r*0.72)}px serif`;
-        ctx.globalAlpha=0.8;
-        ctx.fillText(bMeta.emoji,pos.x,pos.y-2);
-        ctx.globalAlpha=1;
-        ctx.fillStyle='#ffcccc'; ctx.font=`bold ${Math.round(r*0.35)}px Arial`;
-        ctx.fillText(n, pos.x, pos.y+r*0.55);
-        // Tamamlanmış boss: maliyet göster
-        if(done) {
-          const cost = Math.min(200, Math.max(50, n*12));
-          ctx.fillStyle='#ffaa44'; ctx.font=`${Math.round(r*0.30)}px Arial`;
-          ctx.fillText(`💰${cost}`, pos.x, pos.y+r*1.05);
-        }
-      } else if(cfg.isIceWorld){
-        ctx.font=`${Math.round(r*0.60)}px serif`;
-        ctx.globalAlpha=0.75;
-        ctx.fillText('❄️',pos.x,pos.y-2);
-        ctx.globalAlpha=1;
-        ctx.fillStyle='#cceeff'; ctx.font=`bold ${Math.round(r*0.36)}px Arial`;
-        ctx.fillText(n, pos.x, pos.y+r*0.55);
-      } else {
-        ctx.fillStyle=isCurrent?'#ffffff':done?'rgba(200,220,255,0.7)':'#fff';
-        ctx.font=`bold ${Math.round(r*0.52)}px Arial`;
-        ctx.fillText(n, pos.x, pos.y);
-      }
-      // Tamamlanmış: altında küçük yıldız sayısı
-      if(done && stars>0){
-        ctx.font=`${Math.round(r*0.38)}px serif`;
-        ctx.globalAlpha=1;
-        const starStr='★'.repeat(stars);
-        ctx.fillStyle='#ffd700';
-        ctx.fillText(starStr, pos.x, pos.y+r+8);
-      }
+    // Boss special border — double ring
+    if(isBoss && unlocked){
+      ctx.save();
+      ctx.globalAlpha=0.4+0.2*Math.sin(frame*0.06);
+      ctx.strokeStyle=isCurrent?'#ff4466':'#882244';
+      ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.arc(pos.x,pos.y,r+4,0,Math.PI*2); ctx.stroke();
+      ctx.restore();
     }
 
-    // Aktif bölüm pulsing ring
-    if(isCurrent){
-      const pulse=0.5+0.5*Math.sin(frame*0.09);
-      ctx.globalAlpha=pulse*0.5;
-      ctx.strokeStyle=cfg.isBoss?'#ff4466':cfg.isIceWorld?'#66ddff':'#44ffcc';
-      ctx.lineWidth=3; ctx.setLineDash([4,4]);
-      ctx.beginPath(); ctx.arc(pos.x,pos.y,r+5,0,Math.PI*2); ctx.stroke();
-      ctx.setLineDash([]);
+    // Node content
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    if(!unlocked){
+      // Locked: dim lock icon
+      ctx.globalAlpha=0.35;
+      ctx.font=`${Math.round(r*0.65)}px serif`;
+      ctx.fillText('🔒',pos.x,pos.y);
+    } else if(done){
+      // Completed: checkmark + number
+      if(isBoss){
+        const bMeta = BOSS_META[cfg.bossType] || BOSS_META.yassi_yilan;
+        ctx.font=`${Math.round(r*0.6)}px serif`;
+        ctx.globalAlpha=0.7;
+        ctx.fillText(bMeta.emoji,pos.x,pos.y-2);
+        ctx.globalAlpha=1;
+        // Small checkmark overlay
+        ctx.fillStyle='#44ff44'; ctx.font=`bold ${Math.round(r*0.30)}px Arial`;
+        ctx.fillText('✓', pos.x+r*0.45, pos.y-r*0.35);
+      } else {
+        ctx.fillStyle='#44ff88'; ctx.font=`bold ${Math.round(r*0.48)}px Arial`;
+        ctx.fillText('✓', pos.x, pos.y-2);
+        ctx.fillStyle='rgba(255,255,255,0.6)'; ctx.font=`bold ${Math.round(r*0.28)}px Arial`;
+        ctx.fillText(String(n), pos.x, pos.y+r*0.45);
+      }
+      // Star rating below
+      if(stars>0){
+        ctx.globalAlpha=0.9;
+        ctx.font=`${Math.round(r*0.30)}px serif`;
+        ctx.fillStyle='#ffd700';
+        ctx.fillText('★'.repeat(stars), pos.x, pos.y+r+9);
+      }
+    } else if(isCurrent){
+      // Current: prominent number with pulse
+      if(isBoss){
+        const bMeta = BOSS_META[cfg.bossType] || BOSS_META.yassi_yilan;
+        ctx.font=`${Math.round(r*0.7)}px serif`;
+        ctx.fillText(bMeta.emoji,pos.x,pos.y-2);
+        ctx.fillStyle='#ffffff'; ctx.font=`bold ${Math.round(r*0.32)}px Arial`;
+        ctx.shadowColor='#ffffff'; ctx.shadowBlur=8;
+        ctx.fillText(String(n), pos.x, pos.y+r*0.55);
+        // BOSS label
+        ctx.fillStyle='#ff4466'; ctx.font=`bold ${Math.round(r*0.24)}px Arial`;
+        ctx.fillText('BOSS', pos.x, pos.y-r-8);
+      } else {
+        ctx.fillStyle='#ffffff'; ctx.font=`bold ${Math.round(r*0.58)}px Arial`;
+        ctx.shadowColor='#ffffff'; ctx.shadowBlur=10;
+        ctx.fillText(String(n), pos.x, pos.y);
+      }
+      // Pulsing outer ring
+      const pulse=0.4+0.6*Math.sin(frame*0.09);
+      ctx.globalAlpha=pulse*0.6;
+      ctx.strokeStyle=isBoss?'#ff4466':'#00eeff';
+      ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(pos.x,pos.y,r+7,0,Math.PI*2); ctx.stroke();
+      // Second pulse ring
+      ctx.globalAlpha=pulse*0.25;
+      ctx.beginPath(); ctx.arc(pos.x,pos.y,r+13,0,Math.PI*2); ctx.stroke();
+    } else {
+      // Unlocked but not current (shouldn't happen in normal flow, but handle)
+      ctx.fillStyle='#ffffff'; ctx.font=`bold ${Math.round(r*0.48)}px Arial`;
+      ctx.fillText(String(n), pos.x, pos.y);
     }
 
     ctx.restore();
   }
 
-  // ── Üst bar ─────────────────────────────────────────────────────
-  ctx.fillStyle='rgba(5,5,20,0.96)'; ctx.fillRect(0,0,W,MAP_TOP_H);
-  ctx.strokeStyle='rgba(100,80,200,0.35)'; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(0,MAP_TOP_H); ctx.lineTo(W,MAP_TOP_H); ctx.stroke();
+  // ── Top bar — pill badges ───────────────────────────────────────
+  // Background
+  const topBarGrad=ctx.createLinearGradient(0,0,0,MAP_TOP_H);
+  topBarGrad.addColorStop(0,'rgba(5,2,20,0.98)');
+  topBarGrad.addColorStop(1,'rgba(10,5,30,0.95)');
+  ctx.fillStyle=topBarGrad; ctx.fillRect(0,0,W,MAP_TOP_H);
+  // Bottom border glow
+  ctx.save();
+  const borderGrad=ctx.createLinearGradient(0,MAP_TOP_H-2,0,MAP_TOP_H);
+  borderGrad.addColorStop(0,'rgba(100,60,200,0.5)');
+  borderGrad.addColorStop(1,'rgba(100,60,200,0)');
+  ctx.fillStyle=borderGrad; ctx.fillRect(0,MAP_TOP_H-2,W,2);
+  ctx.restore();
 
+  // Title
+  ctx.save();
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.shadowColor='#7744ff'; ctx.shadowBlur=12;
-  ctx.fillStyle='#fff'; ctx.font=`bold ${Math.min(18,W*0.045)}px Arial`;
+  ctx.shadowColor='#8844ff'; ctx.shadowBlur=14;
+  ctx.fillStyle='#fff'; ctx.font=`bold ${Math.min(17,W*0.043)}px Arial`;
   ctx.fillText('NJOX — HARİTA', W/2, MAP_TOP_H/2);
   ctx.shadowBlur=0;
+  ctx.restore();
 
-  // Sol: altın
-  ctx.textAlign='left'; ctx.font=`bold ${Math.min(13,W*0.032)}px Arial`;
-  ctx.fillStyle='#ffd700'; ctx.fillText(`💰 ${SAVE.gold}`, 12, MAP_TOP_H/2);
+  // Left pill: Gold count
+  ctx.save();
+  const goldPillW=Math.min(72,W*0.20), goldPillH=24, goldPillX=8, goldPillY=MAP_TOP_H/2-goldPillH/2;
+  rrect(goldPillX,goldPillY,goldPillW,goldPillH,12);
+  ctx.fillStyle='rgba(255,215,0,0.12)'; ctx.fill();
+  ctx.strokeStyle='rgba(255,215,0,0.35)'; ctx.lineWidth=1; ctx.stroke();
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillStyle='#ffd700'; ctx.font=`bold ${Math.min(11,W*0.028)}px Arial`;
+  ctx.fillText(`💰 ${SAVE.gold}`, goldPillX+goldPillW/2, goldPillY+goldPillH/2);
+  ctx.restore();
 
-  // Sağ: tamamlanan bölüm sayısı
+  // Right pill: Completion
+  ctx.save();
   const doneCount=Math.max(0,SAVE.level-1);
-  ctx.textAlign='right'; ctx.fillStyle='rgba(170,210,255,0.8)';
-  ctx.font=`${Math.min(11,W*0.027)}px Arial`;
-  ctx.fillText(`${doneCount}/${MAP_TOTAL} tamamlandı`, W-12, MAP_TOP_H/2);
+  const compPillW=Math.min(80,W*0.22), compPillH=24, compPillX=W-compPillW-8, compPillY=MAP_TOP_H/2-compPillH/2;
+  rrect(compPillX,compPillY,compPillW,compPillH,12);
+  ctx.fillStyle='rgba(100,160,255,0.10)'; ctx.fill();
+  ctx.strokeStyle='rgba(100,160,255,0.30)'; ctx.lineWidth=1; ctx.stroke();
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillStyle='rgba(170,210,255,0.9)'; ctx.font=`bold ${Math.min(11,W*0.028)}px Arial`;
+  ctx.fillText(`${doneCount}/${MAP_TOTAL}`, compPillX+compPillW/2, compPillY+compPillH/2);
+  ctx.restore();
 
-  // ── Alt bar — OYNA butonu ────────────────────────────────────────
-  ctx.fillStyle='rgba(5,5,20,0.96)'; ctx.fillRect(0,H-MAP_BOT_H,W,MAP_BOT_H);
-  ctx.strokeStyle='rgba(100,80,200,0.35)'; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(0,H-MAP_BOT_H); ctx.lineTo(W,H-MAP_BOT_H); ctx.stroke();
+  // ── Bottom bar — OYNA button ────────────────────────────────────
+  const botBarGrad=ctx.createLinearGradient(0,H-MAP_BOT_H,0,H);
+  botBarGrad.addColorStop(0,'rgba(10,5,30,0.95)');
+  botBarGrad.addColorStop(1,'rgba(5,2,20,0.98)');
+  ctx.fillStyle=botBarGrad; ctx.fillRect(0,H-MAP_BOT_H,W,MAP_BOT_H);
+  // Top border glow
+  ctx.save();
+  const botBorderGrad=ctx.createLinearGradient(0,H-MAP_BOT_H,0,H-MAP_BOT_H+2);
+  botBorderGrad.addColorStop(0,'rgba(100,60,200,0)');
+  botBorderGrad.addColorStop(1,'rgba(100,60,200,0.5)');
+  ctx.fillStyle=botBorderGrad; ctx.fillRect(0,H-MAP_BOT_H,W,2);
+  ctx.restore();
 
   const {bx:pbx, by:pby, bw:pbw, bh:pbh}=mapPlayBtnRect();
   const pulse2=0.88+0.12*Math.sin(frame*0.08);
   ctx.save();
-  ctx.shadowColor='#22aaff'; ctx.shadowBlur=(14+Math.sin(frame*0.08)*5)*pulse2;
+  ctx.shadowColor='#9933ff'; ctx.shadowBlur=(16+Math.sin(frame*0.08)*6)*pulse2;
   rrect(pbx,pby,pbw,pbh,16);
   const btnG=ctx.createLinearGradient(pbx,pby,pbx+pbw,pby+pbh);
-  btnG.addColorStop(0,'#0066cc'); btnG.addColorStop(0.5,'#22aaff'); btnG.addColorStop(1,'#6622cc');
+  btnG.addColorStop(0,'#7700ee'); btnG.addColorStop(0.45,'#bb44ff'); btnG.addColorStop(1,'#5500bb');
   ctx.fillStyle=btnG; ctx.fill();
   ctx.shadowBlur=0;
-  ctx.strokeStyle='rgba(100,210,255,0.4)'; ctx.lineWidth=1.2; ctx.stroke();
+  ctx.strokeStyle='rgba(200,150,255,0.4)'; ctx.lineWidth=1.2; ctx.stroke();
+  // Shine highlight
+  ctx.save(); rrect(pbx,pby,pbw,pbh,16); ctx.clip();
+  ctx.fillStyle='rgba(255,255,255,0.10)'; rrect(pbx+2,pby+2,pbw-4,pbh*0.45,12); ctx.fill();
+  ctx.restore();
   ctx.fillStyle='#fff'; ctx.font=`bold ${Math.min(18,W*0.045)}px Arial`;
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.shadowColor='#aaddff'; ctx.shadowBlur=8;
+  ctx.shadowColor='#cc88ff'; ctx.shadowBlur=10;
   ctx.fillText(`▶  BÖLÜM ${SAVE.level} OYNA`, W/2, pby+pbh/2);
   ctx.restore();
 }
@@ -4884,58 +4974,8 @@ function drawIntroScreen() {
   ctx.fillText('Kill the Stress! 😤', W/2, stressY);
   ctx.restore();
 
-  // ── Top Pazarı ───────────────────────────────────────────────
-  const marketY = H*0.52;
-  ctx.save();
-  ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillStyle='rgba(180,140,255,0.65)'; ctx.font=`bold ${Math.min(12,W*0.030)}px Arial`;
-  ctx.fillText('▸ TOP SEÇ', W/2, marketY - 22);
-  ctx.restore();
-
-  const hitboxes = introBallMarketHitboxes();
-  const selectedSkin = SAVE.ballSkin || 'classic';
-  for(const hb of hitboxes) {
-    const isSelected = hb.skin.id === selectedSkin;
-    const isUnlocked = (SAVE.unlockedSkins||['classic']).includes(hb.skin.id);
-    const r = hb.r;
-    ctx.save();
-    if(isSelected && isUnlocked) { ctx.shadowColor='#ff66cc'; ctx.shadowBlur=18+Math.sin(frame*0.10)*6; }
-    // Daire arka plan
-    ctx.beginPath(); ctx.arc(hb.x, hb.y, r+2, 0, Math.PI*2);
-    ctx.fillStyle = isSelected && isUnlocked ? 'rgba(200,80,255,0.22)' : 'rgba(40,30,70,0.55)';
-    ctx.fill();
-    ctx.strokeStyle = isSelected && isUnlocked ? '#dd44ff' : 'rgba(100,70,150,0.45)';
-    ctx.lineWidth = isSelected && isUnlocked ? 2.2 : 1;
-    ctx.stroke();
-    ctx.shadowBlur=0;
-    // Gerçek top doku (drawBallSkin kullan)
-    ctx.globalAlpha = isUnlocked ? (isSelected ? 1.0 : 0.75) : 0.30;
-    drawBallSkin(hb.skin.id, hb.x, hb.y, r, 2);
-    ctx.globalAlpha=1;
-    // Kilit ikonu
-    if(!isUnlocked) {
-      ctx.fillStyle='rgba(180,140,255,0.9)'; ctx.font=`${Math.floor(r*0.9)}px serif`;
-      ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText('🔒', hb.x, hb.y);
-    }
-    // İsim etiketi
-    ctx.globalAlpha = isUnlocked ? (isSelected ? 1 : 0.60) : 0.50;
-    ctx.fillStyle = isSelected && isUnlocked ? '#ffccff' : '#9988bb';
-    ctx.font=`${Math.min(9,W*0.022)}px Arial`;
-    ctx.textAlign='center'; ctx.textBaseline='top';
-    ctx.fillText(hb.skin.name, hb.x, hb.y + r + 4);
-    // Fiyat/reklam bilgisi altında (kilit ise)
-    if(!isUnlocked) {
-      ctx.globalAlpha=0.8;
-      ctx.fillStyle='#ffcc44'; ctx.font=`bold ${Math.min(8,W*0.020)}px Arial`;
-      const lbl = hb.skin.price > 0 ? `${hb.skin.price}💰` : `📺×${hb.skin.adCount}`;
-      ctx.fillText(lbl, hb.x, hb.y + r + 14);
-    }
-    ctx.restore();
-  }
-
   // ── ▶ BAŞLA butonu ────────────────────────────────────────────
-  const btnW=Math.min(W*0.55,200), btnH=50, btnX=W/2-btnW/2, btnY=H*0.80;
+  const btnW=Math.min(W*0.55,200), btnH=50, btnX=W/2-btnW/2, btnY=H*0.68;
   const pulse = 0.88+0.12*Math.sin(frame*0.09);
   ctx.save();
   ctx.shadowColor='#9933ff'; ctx.shadowBlur=(18+Math.sin(frame*0.09)*8)*pulse;
@@ -4950,6 +4990,24 @@ function drawIntroScreen() {
   ctx.fillStyle='#ffffff'; ctx.font=`bold ${Math.min(20,W*0.050)}px Arial`;
   ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.fillText('▶ BAŞLA', W/2, btnY+btnH/2);
+  ctx.restore();
+
+  // ── 🏪 Top Dükkanı butonu ──────────────────────────────────────
+  const shopBtnW=180, shopBtnH=40;
+  const shopBtnX=W/2-shopBtnW/2, shopBtnY=btnY+btnH+20;
+  ctx.save();
+  ctx.shadowColor='#ff8800'; ctx.shadowBlur=10+Math.sin(frame*0.07)*4;
+  rrect(shopBtnX,shopBtnY,shopBtnW,shopBtnH,12);
+  const sG = ctx.createLinearGradient(shopBtnX,shopBtnY,shopBtnX+shopBtnW,shopBtnY+shopBtnH);
+  sG.addColorStop(0,'#cc6600'); sG.addColorStop(0.45,'#ff9922'); sG.addColorStop(1,'#cc6600');
+  ctx.fillStyle=sG; ctx.fill(); ctx.shadowBlur=0;
+  ctx.strokeStyle='rgba(255,200,100,0.5)'; ctx.lineWidth=1.2; ctx.stroke();
+  ctx.save(); rrect(shopBtnX,shopBtnY,shopBtnW,shopBtnH,12); ctx.clip();
+  ctx.fillStyle='rgba(255,255,255,0.10)'; rrect(shopBtnX+2,shopBtnY+2,shopBtnW-4,shopBtnH*0.45,10); ctx.fill(); ctx.restore();
+  ctx.shadowColor='rgba(255,200,100,0.8)'; ctx.shadowBlur=6;
+  ctx.fillStyle='#ffffff'; ctx.font=`bold ${Math.min(15,W*0.038)}px Arial`;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('🏪 Top Dükkanı', W/2, shopBtnY+shopBtnH/2);
   ctx.restore();
 
   // ── Alt bilgi ─────────────────────────────────────────────────
@@ -5116,23 +5174,18 @@ function checkPowerupTap(p) {
 function onDown(e) {
   e.preventDefault();const p=getPos(e);
   if(G.phase==='intro') {
-    // Top pazarı tıklama
-    for(const hb of introBallMarketHitboxes()) {
-      if(Math.hypot(p.x-hb.x, p.y-hb.y) < hb.r+14) {
-        const unlocked = (SAVE.unlockedSkins||['classic']).includes(hb.skin.id);
-        if(unlocked) {
-          SAVE.ballSkin = hb.skin.id;
-          saveSave();
-        } else {
-          showSkinUnlockOverlay(hb.skin);
-        }
-        return;
-      }
-    }
-    // BAŞLA butonu (draw ile senkron: H*0.82 - btnH/2)
-    const btnW=Math.min(W*0.64,235), btnH=56, btnX=W/2-btnW/2, btnY=H*0.82-btnH/2;
+    // BAŞLA butonu (draw ile senkron: H*0.68)
+    const btnW=Math.min(W*0.55,200), btnH=50, btnX=W/2-btnW/2, btnY=H*0.68;
     if(p.x>=btnX&&p.x<=btnX+btnW&&p.y>=btnY&&p.y<=btnY+btnH) {
       G.phase='map';
+      return;
+    }
+    // Top Dükkanı butonu
+    const shopBtnW=180, shopBtnH=40;
+    const shopBtnX=W/2-shopBtnW/2, shopBtnY=btnY+btnH+20;
+    if(p.x>=shopBtnX&&p.x<=shopBtnX+shopBtnW&&p.y>=shopBtnY&&p.y<=shopBtnY+shopBtnH) {
+      G.shopOpen = true;
+      return;
     }
     return;
   }
