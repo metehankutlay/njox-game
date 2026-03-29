@@ -1623,14 +1623,7 @@ function advanceTurn() {
     }
   }
 
-  // ── Fireball teklifi — her 8 turda, slotta ateş topu yoksa (az sıklıkta) ──
-  if(G.turn % 8 === 0 && G.turn > 0 && !G.bossActive) {
-    const hasFireball = G.powerupSlots.some(s => s && s.type === PU_FIREBALL);
-    const hasEmptySlot = G.powerupSlots.some(s => s === null);
-    if(!hasFireball && hasEmptySlot && G.gold >= 20) {
-      G.fireballOfferTimer = 120; // ~2 saniye (60fps)
-    }
-  }
+  // (fireball teklif banner'ı kaldırıldı)
 
   G.phase='fall'; G.fallProg=0;
 }
@@ -4591,7 +4584,29 @@ function drawUI() {
 
   // Power-up slotları (merkez)
   drawPowerupBar();
-  drawFireballOffer();
+  // Skill bar tutorial — ilk bölümde 1 kere göster
+  if(G.level <= 2 && G.turn <= 1 && !G._skillTutorialDismissed && G.phase==='aim') {
+    const sy = PU_SLOT_Y();
+    const arrowY = sy - 50;
+    const pulse = 0.7 + 0.3*Math.abs(Math.sin(frame*0.08));
+    ctx.save();
+    ctx.globalAlpha = pulse;
+    // Ok işareti
+    ctx.fillStyle='#ffd700'; ctx.font='bold 22px Arial';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('⬇', W/2, arrowY);
+    // Bilgi kutusu
+    const bw=Math.min(260,W*0.7), bh=48;
+    const bx=W/2-bw/2, by=arrowY-bh-6;
+    ctx.fillStyle='rgba(0,0,20,0.88)';
+    rrect(bx,by,bw,bh,12); ctx.fill();
+    ctx.strokeStyle='rgba(255,215,0,0.6)'; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle='#ffd700'; ctx.font=`bold ${Math.min(13,W*0.034)}px Arial`;
+    ctx.fillText('💣🔥 Güçler burada! Satın al & aktif et', W/2, by+16);
+    ctx.fillStyle='#88ff88'; ctx.font=`${Math.min(11,W*0.028)}px Arial`;
+    ctx.fillText('[ Anladım ✓ ]', W/2, by+36);
+    ctx.restore();
+  }
 
   // BallBuff göstergesi — sağ alt, hız butonunun altında
   if(G.ballBuff && G.ballBuff.turnsLeft > 0) {
@@ -5780,32 +5795,7 @@ function onDown(e) {
     return;
   }
   if(G.over){ initGame(); return; }
-  // ── Fireball teklifi tıklama ──
-  if(G.fireballOfferTimer > 0) {
-    const bannerW = Math.min(260, W * 0.72);
-    const bannerY = H * 0.32;
-    const bannerH = 54;
-    const bx2 = W/2 - bannerW/2;
-    if(p.x >= bx2 && p.x <= bx2 + bannerW && p.y >= bannerY && p.y <= bannerY + bannerH) {
-      if(G.gold >= 20) {
-        const emptySlot = G.powerupSlots.indexOf(null);
-        if(emptySlot !== -1) {
-          G.gold -= 20;
-          G.powerupSlots[emptySlot] = {type: PU_FIREBALL, pulse: 0};
-          G.puActivateFlash[emptySlot] = 180;
-          spawnParticles(W/2, H/2, '#ff3d5a', 22, true);
-          spawnFloater(W/2, H*0.28, '🔥 Ateş Topu ALINDI!', '#ff3d5a');
-          G.shake = 6;
-          G.fireballOfferTimer = 0;
-        } else {
-          spawnFloater(W/2, H*0.4, '⚠️ Slot dolu!', '#ff4444');
-        }
-      } else {
-        spawnFloater(W/2, H*0.4, '💰 Yeterli altın yok!', '#ff4444');
-      }
-      return;
-    }
-  }
+  // (fireball teklif tıklama kaldırıldı)
 
   // (duplicate shop handler silindi — onDown başındaki tek handler yeterli)
   // Üst çubukta 🏪 MAĞAZA butonuna tıklama — her fazda çalışır
@@ -5830,6 +5820,16 @@ function onDown(e) {
     }
     if(G.phase==='aim') checkPowerupTap(p);
     return;
+  }
+  // Skill bar tutorial "Anladım" tıklama
+  if(G.phase==='aim' && G.level<=2 && G.turn<=1 && !G._skillTutorialDismissed) {
+    const sy2=PU_SLOT_Y(), arrowY2=sy2-50, tbh=48, tby=arrowY2-tbh-6;
+    const tbw=Math.min(260,W*0.7), tbx=W/2-tbw/2;
+    if(p.x>=tbx&&p.x<=tbx+tbw&&p.y>=tby&&p.y<=tby+tbh+30) {
+      G._skillTutorialDismissed=true;
+      spawnFloater(W/2,H*0.5,'👍 Harika!','#44ff88');
+      return;
+    }
   }
   if(G.phase!=='aim') return;
   touching=true;G.aimAngle=calcAngle(p.x,p.y);
