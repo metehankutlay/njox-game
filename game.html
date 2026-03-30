@@ -183,16 +183,15 @@ loadAllSprites();
 let COLS = 20; // resize() içinde dinamik hesaplanır
 const GAP = 1, BALL_R = 6, BALL_SPD = 14;
 
-// Performans: mobilde aşırı büyük gölgeleri sınırla (shadowBlur>15 çok ağır)
-const IS_MOBILE = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) || (window.innerWidth < 600 && 'ontouchstart' in window);
-const _origSBDesc = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'shadowBlur');
-if(IS_MOBILE && _origSBDesc) {
-  Object.defineProperty(CanvasRenderingContext2D.prototype, 'shadowBlur', {
-    get() { return _origSBDesc.get.call(this); },
-    set(v) { _origSBDesc.set.call(this, Math.min(v, 14)); }, // max 14px — görsel korunur, performans artar
-    configurable: true
-  });
+// ── Performans modu ──────────────────────────────────────
+// Mobilde shadowBlur ve fazla gradient'leri kapat
+const IS_MOBILE = ('ontouchstart' in window) || navigator.maxTouchPoints > 0 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+const MAX_PARTICLES = IS_MOBILE ? 80 : 250;
+function setShadow(color, blur) {
+  if(IS_MOBILE) { ctx.shadowBlur = 0; ctx.shadowColor = 'transparent'; return; }
+  ctx.shadowColor = color; ctx.shadowBlur = blur;
 }
+function clearShadow() { ctx.shadowBlur = 0; ctx.shadowColor = 'transparent'; }
 
 // ── Intro/Splash Screen ───────────────────────────────────────
 let INTRO_BALLS = [];
@@ -379,17 +378,6 @@ function scrollToCurrentLevel() {
 }
 
 const DPR = Math.min(window.devicePixelRatio || 1, 2); // max 2x — 3x telefonlarda çok ağır
-
-// ── Performans modu ──────────────────────────────────────
-// Mobilde shadowBlur ve fazla gradient'leri kapat
-const IS_MOBILE = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
-const MAX_PARTICLES = IS_MOBILE ? 80 : 250;
-// shadowBlur wrapper — mobilde no-op
-function setShadow(color, blur) {
-  if(IS_MOBILE) { ctx.shadowBlur = 0; ctx.shadowColor = 'transparent'; return; }
-  ctx.shadowColor = color; ctx.shadowBlur = blur;
-}
-function clearShadow() { ctx.shadowBlur = 0; ctx.shadowColor = 'transparent'; }
 
 function resize() {
   W = window.innerWidth;
