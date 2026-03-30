@@ -159,6 +159,22 @@ async function loadAllSprites() {
     img.src = 'kule.png';
   });
 
+  // boss.png — 5 boss sprite sheet (1536×1024)
+  // Üst sıra: 3 boss (512×512 her biri), Alt sıra: 2 boss (centered)
+  await new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      cropSprite('boss_plant',   img,    0,   0, 512, 512); // yeşil bitki canavarı
+      cropSprite('boss_golem',   img,  512,   0, 512, 512); // buz golem
+      cropSprite('boss_fire',    img, 1024,   0, 512, 512); // ateş iblisi
+      cropSprite('boss_mummy',   img,  128, 512, 512, 512); // mumya savaşçı
+      cropSprite('boss_octopus', img,  768, 512, 512, 512); // ahtapot
+      resolve();
+    };
+    img.onerror = resolve;
+    img.src = 'boss.png';
+  });
+
   SPRITES_READY = true;
 }
 loadAllSprites();
@@ -3224,6 +3240,32 @@ function drawDragonHead(head, neck, ph, meta) {
   const hpR=head.hp/head.maxHp;
   // Breathing animation — subtle scale pulse
   const breathe = 0.97 + 0.06 * Math.sin(frame * 0.035);
+
+  // ── Sprite varsa resim çiz ve return ───────────────────────
+  const bossSprite = meta.sprite && SPRITES[meta.sprite];
+  if(bossSprite) {
+    ctx.save();
+    ctx.translate(hcx, hcy);
+    ctx.scale(breathe, breathe);
+    // Hasar aldıkça kırmızılaşma
+    if(hpR < 0.5) {
+      ctx.globalAlpha = 0.85;
+      const dmgPulse = Math.sin(frame*0.15)*0.15;
+      ctx.filter = `brightness(${0.6+hpR*0.6+dmgPulse}) saturate(${0.5+hpR*0.8})`;
+    }
+    const sprSize = BS * 2.2;
+    ctx.drawImage(bossSprite, -sprSize/2, -sprSize/2, sprSize, sprSize);
+    ctx.filter = 'none';
+    ctx.globalAlpha = 1;
+    // HP bar altına
+    const barW = sprSize*0.8, barH = 6;
+    ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(-barW/2, sprSize/2-2, barW, barH);
+    ctx.fillStyle = hpR > 0.5 ? '#44ff44' : hpR > 0.25 ? '#ffaa00' : '#ff3333';
+    ctx.fillRect(-barW/2, sprSize/2-2, barW*hpR, barH);
+    ctx.restore();
+    return; // Sprite çizildi, canvas head'e gerek yok
+  }
+
   ctx.save();
   ctx.translate(hcx,hcy);
   ctx.rotate(angle);
@@ -4758,26 +4800,26 @@ function drawUI() {
 
 // Boss tiplerine göre görsel kimlik
 const BOSS_META = {
-  sarkac:      { emoji:'⚖️',  name:'SARKAÇ',           c1:'#ff8c00', c2:'#7a3800', flash:'rgba(200,100,0,', particle:'#ffcc44' },
-  ayna_kalkan: { emoji:'🪞',  name:'AYNA KALKAN',      c1:'#88ccff', c2:'#0044aa', flash:'rgba(80,140,255,',particle:'#ffffff' },
-  tunel:       { emoji:'🌀',  name:'TÜNEL EJDERİ',     c1:'#00ff99', c2:'#003322', flash:'rgba(0,180,100,', particle:'#66ffcc' },
-  teleport:    { emoji:'⚡',  name:'TELEPORT',          c1:'#cc44ff', c2:'#440066', flash:'rgba(140,0,200,', particle:'#ee88ff' },
-  rayli:       { emoji:'🚂',  name:'DEMİR GOLEM',      c1:'#aaaaaa', c2:'#333333', flash:'rgba(140,140,140,',particle:'#dddddd' },
-  ziplayin:    { emoji:'🐸',  name:'ZIPLAYAN KURBAĞA', c1:'#44dd44', c2:'#115511', flash:'rgba(40,160,40,', particle:'#88ff88' },
-  yorungeli:   { emoji:'🪐',  name:'GEZEGEN',           c1:'#ff6644', c2:'#771100', flash:'rgba(200,80,40,', particle:'#ffaa88' },
-  yassi_yilan: { emoji:'🐍',  name:'YILAN REİS',       c1:'#22ee55', c2:'#005522', flash:'rgba(0,180,0,',   particle:'#44ff88' },
-  lazer:       { emoji:'🔴',  name:'LAZER KULE',       c1:'#ff2222', c2:'#880000', flash:'rgba(200,0,0,',   particle:'#ff8888' },
-  manyetik:    { emoji:'🧲',  name:'MANYETİK',          c1:'#4444ff', c2:'#000088', flash:'rgba(40,40,200,', particle:'#8888ff' },
-  buz_frizi:   { emoji:'❄️',  name:'BUZ FRİZİ',        c1:'#88eeff', c2:'#002244', flash:'rgba(80,180,220,',particle:'#ccffff' },
-  tas_yagmuru: { emoji:'🪨',  name:'TAŞ YAĞMURU',      c1:'#aa8866', c2:'#442200', flash:'rgba(130,100,60,',particle:'#ddbb99' },
-  kabarcik:    { emoji:'🫧',  name:'KABARCIK',          c1:'#44bbff', c2:'#001144', flash:'rgba(40,140,220,',particle:'#aaddff' },
-  alev_duvari: { emoji:'🔥',  name:'ALEV DUVARI',      c1:'#ff6600', c2:'#882200', flash:'rgba(200,80,0,',  particle:'#ffaa00' },
-  uc_fazli:    { emoji:'🐲',  name:'ÜÇ FAZLI EJDERHA', c1:'#4499ff', c2:'#002288', flash:'rgba(0,80,255,',  particle:'#88ccff' },
-  kaplama:     { emoji:'🗿',  name:'ZIRH GOLEM',       c1:'#bbaa88', c2:'#443322', flash:'rgba(140,100,50,',particle:'#ddcc99' },
-  evrim:       { emoji:'🦠',  name:'EVRİM',             c1:'#66ff44', c2:'#114400', flash:'rgba(60,180,40,', particle:'#aaff88' },
-  hibernasyon: { emoji:'🧊',  name:'HİBERNASYON',      c1:'#00ddcc', c2:'#003344', flash:'rgba(0,180,160,', particle:'#66ffee' },
-  cift_kalp:   { emoji:'💕',  name:'ÇİFT KALP',        c1:'#ff44aa', c2:'#660033', flash:'rgba(200,40,120,',particle:'#ff99cc' },
-  son_hamle:   { emoji:'💀',  name:'SON HAMLE',         c1:'#9933ff', c2:'#110022', flash:'rgba(80,0,160,',  particle:'#cc66ff' },
+  sarkac:      { emoji:'⚖️',  name:'SARKAÇ',           c1:'#ff8c00', c2:'#7a3800', flash:'rgba(200,100,0,', particle:'#ffcc44', sprite:'boss_plant' },
+  ayna_kalkan: { emoji:'🪞',  name:'AYNA KALKAN',      c1:'#88ccff', c2:'#0044aa', flash:'rgba(80,140,255,',particle:'#ffffff', sprite:'boss_golem' },
+  tunel:       { emoji:'🌀',  name:'TÜNEL EJDERİ',     c1:'#00ff99', c2:'#003322', flash:'rgba(0,180,100,', particle:'#66ffcc', sprite:'boss_plant' },
+  teleport:    { emoji:'⚡',  name:'TELEPORT',          c1:'#cc44ff', c2:'#440066', flash:'rgba(140,0,200,', particle:'#ee88ff', sprite:'boss_octopus' },
+  rayli:       { emoji:'🚂',  name:'DEMİR GOLEM',      c1:'#aaaaaa', c2:'#333333', flash:'rgba(140,140,140,',particle:'#dddddd', sprite:'boss_golem' },
+  ziplayin:    { emoji:'🐸',  name:'ZIPLAYAN KURBAĞA', c1:'#44dd44', c2:'#115511', flash:'rgba(40,160,40,', particle:'#88ff88', sprite:'boss_plant' },
+  yorungeli:   { emoji:'🪐',  name:'GEZEGEN',           c1:'#ff6644', c2:'#771100', flash:'rgba(200,80,40,', particle:'#ffaa88', sprite:'boss_fire' },
+  yassi_yilan: { emoji:'🐍',  name:'YILAN REİS',       c1:'#22ee55', c2:'#005522', flash:'rgba(0,180,0,',   particle:'#44ff88', sprite:'boss_plant' },
+  lazer:       { emoji:'🔴',  name:'LAZER KULE',       c1:'#ff2222', c2:'#880000', flash:'rgba(200,0,0,',   particle:'#ff8888', sprite:'boss_fire' },
+  manyetik:    { emoji:'🧲',  name:'MANYETİK',          c1:'#4444ff', c2:'#000088', flash:'rgba(40,40,200,', particle:'#8888ff', sprite:'boss_octopus' },
+  buz_frizi:   { emoji:'❄️',  name:'BUZ FRİZİ',        c1:'#88eeff', c2:'#002244', flash:'rgba(80,180,220,',particle:'#ccffff', sprite:'boss_golem' },
+  tas_yagmuru: { emoji:'🪨',  name:'TAŞ YAĞMURU',      c1:'#aa8866', c2:'#442200', flash:'rgba(130,100,60,',particle:'#ddbb99', sprite:'boss_mummy' },
+  kabarcik:    { emoji:'🫧',  name:'KABARCIK',          c1:'#44bbff', c2:'#001144', flash:'rgba(40,140,220,',particle:'#aaddff', sprite:'boss_octopus' },
+  alev_duvari: { emoji:'🔥',  name:'ALEV DUVARI',      c1:'#ff6600', c2:'#882200', flash:'rgba(200,80,0,',  particle:'#ffaa00', sprite:'boss_fire' },
+  uc_fazli:    { emoji:'🐲',  name:'ÜÇ FAZLI EJDERHA', c1:'#4499ff', c2:'#002288', flash:'rgba(0,80,255,',  particle:'#88ccff', sprite:'boss_fire' },
+  kaplama:     { emoji:'🗿',  name:'ZIRH GOLEM',       c1:'#bbaa88', c2:'#443322', flash:'rgba(140,100,50,',particle:'#ddcc99', sprite:'boss_mummy' },
+  evrim:       { emoji:'🦠',  name:'EVRİM',             c1:'#66ff44', c2:'#114400', flash:'rgba(60,180,40,', particle:'#aaff88', sprite:'boss_plant' },
+  hibernasyon: { emoji:'🧊',  name:'HİBERNASYON',      c1:'#00ddcc', c2:'#003344', flash:'rgba(0,180,160,', particle:'#66ffee', sprite:'boss_golem' },
+  cift_kalp:   { emoji:'💕',  name:'ÇİFT KALP',        c1:'#ff44aa', c2:'#660033', flash:'rgba(200,40,120,',particle:'#ff99cc', sprite:'boss_mummy' },
+  son_hamle:   { emoji:'💀',  name:'SON HAMLE',         c1:'#9933ff', c2:'#110022', flash:'rgba(80,0,160,',  particle:'#cc66ff', sprite:'boss_octopus' },
 };
 
 function drawBossIntro() {
@@ -4829,7 +4871,7 @@ function drawBossIntro() {
     ctx.restore();
   }
 
-  // ── 4. Boss emoji büyüyor + sallanan (0.35 → 0.82) ────────────
+  // ── 4. Boss görseli büyüyor + sallanan (0.35 → 0.82) ────────────
   if (t > 0.35) {
     const a = Math.min(1,(t-0.35)/0.22);
     const scl = 0.35 + a*0.72 + Math.sin(elapsed*0.14)*0.04;
@@ -4840,9 +4882,16 @@ function drawBossIntro() {
     ctx.scale(scl, scl);
     ctx.rotate(rot);
     ctx.shadowColor = meta.c1; ctx.shadowBlur = 30 + Math.sin(elapsed*0.18)*10;
-    ctx.font = `${Math.min(96,W*0.23)}px serif`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(meta.emoji, 0, 0);
+    // Sprite varsa resim çiz, yoksa emoji fallback
+    const bossSprite = meta.sprite && SPRITES[meta.sprite];
+    if(bossSprite) {
+      const sprSize = Math.min(160, W*0.38);
+      ctx.drawImage(bossSprite, -sprSize/2, -sprSize/2, sprSize, sprSize);
+    } else {
+      ctx.font = `${Math.min(96,W*0.23)}px serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(meta.emoji, 0, 0);
+    }
     ctx.restore();
     // Renk partikülleri
     if(elapsed % 8 === 0) spawnParticles(W/2, H*0.50, meta.particle, 4, true);
