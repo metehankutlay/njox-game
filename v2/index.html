@@ -3746,6 +3746,75 @@ function drawBossElements() {
   const [dr,dg,db] = hexToRgbArr(meta.c2);
   const [pr,pg,pb] = hexToRgbArr(meta.particle);
 
+  // ── SPRITE BOSS: yılan gövdesi yok, tek büyük figür ───────
+  const bossSprite = meta.sprite && SPRITES[meta.sprite];
+  if(bossSprite && aliveSegs.length >= 1) {
+    // Head segment pozisyonunda büyük sprite çiz
+    const head = aliveSegs[0];
+    const hx = sx(head), hy = sy(head);
+    const totalHp = aliveSegs.reduce((a,s)=>a+s.hp,0);
+    const totalMaxHp = aliveSegs.reduce((a,s)=>a+s.maxHp,0);
+    const hpR = totalHp / totalMaxHp;
+    const breathe = 0.95 + 0.08 * Math.sin(frame * 0.03);
+    // Hasar titreşimi
+    const dmgShake = head.shake > 0 ? (Math.random()-0.5)*6 : 0;
+    const sprSize = BS * 3.2;
+
+    ctx.save();
+    ctx.translate(hx + dmgShake, hy);
+    ctx.scale(breathe, breathe);
+
+    // Hasar aldıkça kırmızılaşma + flash
+    if(hpR < 0.4) {
+      const flash = Math.sin(frame*0.2)*0.2;
+      ctx.filter = `brightness(${0.5+hpR*0.8+flash}) saturate(${0.4+hpR*0.8})`;
+    }
+
+    ctx.drawImage(bossSprite, -sprSize/2, -sprSize/2, sprSize, sprSize);
+    ctx.filter = 'none';
+
+    // HP bar — boss altında
+    const barW = sprSize*0.7, barH = 8;
+    const barY = sprSize/2 - 8;
+    ctx.fillStyle='rgba(0,0,0,0.7)';
+    rrect(-barW/2, barY, barW, barH, 4); ctx.fill();
+    ctx.fillStyle = hpR > 0.5 ? '#44ff44' : hpR > 0.25 ? '#ffaa00' : '#ff3333';
+    if(barW*hpR > 0) { rrect(-barW/2, barY, barW*hpR, barH, 4); ctx.fill(); }
+
+    // HP text
+    ctx.fillStyle='#fff'; ctx.font=`bold ${Math.max(9,BS*0.32)}px Arial`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(`${totalHp}/${totalMaxHp}`, 0, barY + barH/2);
+
+    ctx.restore();
+
+    // Boss adı — sprite üstünde
+    const bossName = SAVE.customBossName || meta.name;
+    const bobY = Math.sin(frame * 0.04) * 4;
+    ctx.save();
+    ctx.font = `bold ${Math.max(14,BS*0.5)}px Arial`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.lineWidth = 3; ctx.lineJoin = 'round';
+    const nameY = hy - sprSize*breathe/2 - 6 + bobY;
+    ctx.strokeText(bossName, hx, nameY);
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = meta.c1; ctx.shadowBlur = 6;
+    ctx.fillText(bossName, hx, nameY);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+
+    // Parçacık efekti (hasar aldıkça daha çok)
+    if(hpR < 0.6 && frame % 12 === 0) {
+      spawnParticles(hx + (Math.random()-0.5)*sprSize*0.4, hy + (Math.random()-0.5)*sprSize*0.3, meta.particle, 3, false);
+    }
+
+    // Diğer segment'ler görünmez ama hitbox olarak kalır
+    // Kule, kara delik vs çizmeye devam et (aşağıda)
+    _drawBossTowersAndHoles(boss, meta, ph);
+    ctx.restore && 0; // noop
+    return;
+  }
+
   if(aliveSegs.length >= 2) {
     // ── Bezier connections between segments — dark outline ──────
     ctx.save();
@@ -3890,6 +3959,14 @@ function drawBossElements() {
     ctx.restore();
   }
 
+  _drawBossTowersAndHoles(boss, meta, ph);
+}
+
+function _drawBossTowersAndHoles(boss, meta, ph) {
+  const aliveSegs=boss.segments.filter(s=>!s._dead&&s.hp>0);
+  const [mr,mg,mb] = hexToRgbArr(meta.c1);
+  const [dr,dg,db] = hexToRgbArr(meta.c2);
+  const [pr,pg,pb] = hexToRgbArr(meta.particle);
   // Draw towers
   for(let ti=0;ti<boss.towers.length;ti++) {
     const tw=boss.towers[ti];
