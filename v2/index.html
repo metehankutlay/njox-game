@@ -714,35 +714,58 @@ function showSkinUnlockOverlay(skin) {
   const buyBtn = document.getElementById('skinBuyBtn');
   const adBtn  = document.getElementById('skinAdBtn');
   if(!ov) return;
-  // Preview: draw on small canvas element or just show emoji placeholder
   const emojiMap = {tennis:'🎾',football:'⚽',basket:'🏀',bowling:'🎳',dart:'🎯',bomb2:'💣',crystal2:'💎',classic:'🔵'};
   preview.textContent = emojiMap[skin.id] || '🎱';
   nameEl.textContent = skin.name;
   descEl.textContent = `${skin.desc}  |  Hız: ${skin.speedMult}×  Boyut: ${skin.sizeMult}×  Hasar: ${skin.damageMult}×`;
   const gold = G ? G.gold : (SAVE.gold||0);
+  // ---- Altın ile satın al ----
   if(skin.price > 0) {
     buyBtn.style.display='block';
-    buyBtn.textContent = `💰 ${skin.price} Altın ile Satın Al  (Bakiye: ${gold})`;
-    buyBtn.style.background = gold >= skin.price ? 'linear-gradient(135deg,#9922ff,#5511aa)' : 'rgba(80,40,80,0.7)';
+    const canBuy = gold >= skin.price;
+    buyBtn.textContent = canBuy ? `💰 ${skin.price} Altın — Satın Al` : `🔒 ${skin.price} Altın (Yetersiz)`;
+    buyBtn.style.background = canBuy ? 'linear-gradient(135deg,#9922ff,#5511aa)' : 'rgba(80,40,80,0.5)';
+    buyBtn.style.opacity = canBuy ? '1' : '0.6';
+    buyBtn._confirmed = false;
     buyBtn.onclick = () => {
-      if((G ? G.gold : SAVE.gold) >= skin.price) {
-        if(G) G.gold -= skin.price;
-        SAVE.gold = (G ? G.gold : SAVE.gold);
-        SAVE.unlockedSkins = [...(SAVE.unlockedSkins||['classic']), skin.id];
-        SAVE.ballSkin = skin.id;
-        saveSave();
-        hideSkinUnlockOverlay();
-      } else {
-        buyBtn.style.background = 'rgba(180,40,40,0.8)';
+      const curGold = G ? G.gold : SAVE.gold;
+      if(curGold < skin.price) {
         buyBtn.textContent = '❌ Yetersiz Altın!';
+        buyBtn.style.background = 'rgba(180,40,40,0.8)';
+        return;
       }
+      if(!buyBtn._confirmed) {
+        // İlk tık: onay iste
+        buyBtn._confirmed = true;
+        buyBtn.textContent = `⚠️ ${skin.price} 💰 harcanacak — ONAYLA`;
+        buyBtn.style.background = 'linear-gradient(135deg,#dd4400,#992200)';
+        setTimeout(()=>{ buyBtn._confirmed=false; buyBtn.textContent=`💰 ${skin.price} Altın — Satın Al`; buyBtn.style.background='linear-gradient(135deg,#9922ff,#5511aa)'; }, 3000);
+        return;
+      }
+      // İkinci tık: satın al
+      const oldGold = curGold;
+      if(G) G.gold -= skin.price;
+      SAVE.gold = (G ? G.gold : SAVE.gold - skin.price);
+      SAVE.unlockedSkins = [...(SAVE.unlockedSkins||['classic']), skin.id];
+      SAVE.ballSkin = skin.id;
+      saveSave();
+      // Başarı gösterimi
+      buyBtn.textContent = `✅ ${skin.name} Alındı!  (${oldGold}💰 → ${SAVE.gold}💰)`;
+      buyBtn.style.background = 'linear-gradient(135deg,#00aa44,#006622)';
+      buyBtn.onclick = null;
+      adBtn.style.display = 'none';
+      spawnFloater(W/2, H*0.25, `✅ ${skin.name} Alındı!`, '#00ff88');
+      spawnFloater(W/2, H*0.32, `💰 -${skin.price} Altın  (Kalan: ${SAVE.gold})`, '#ffd700');
+      if(G) spawnParticles(W/2, H/2, '#ffd700', 16, true);
+      setTimeout(()=>hideSkinUnlockOverlay(), 1500);
     };
   } else {
     buyBtn.style.display='none';
   }
+  // ---- Reklam ile aç ----
   if(skin.adCount > 0) {
     adBtn.style.display='block';
-    adBtn.textContent = `📺 ${skin.adCount} Reklam İzle`;
+    adBtn.textContent = `📺 ${skin.adCount} Reklam İzle (Ücretsiz)`;
     adBtn.onclick = () => { hideSkinUnlockOverlay(); startAdWatch(skin); };
   } else {
     adBtn.style.display='none';
@@ -5640,16 +5663,25 @@ function onDown(e) {
       const col=i%2, row=Math.floor(i/2);
       const ix=px+8+col*(itemW2+itemGap2), iy=startY2+row*(itemH2+itemGap2)-sc;
       if(p.x>=ix&&p.x<=ix+itemW2&&p.y>=iy&&p.y<=iy+itemH2&&p.y>py+44&&p.y<py+ph-8){
-        if(G.gold>=it.cost){
-          const es=G.powerupSlots.indexOf(null);
-          if(es!==-1){
-            G.gold-=it.cost; SAVE.gold=G.gold; saveSave();
-            G.powerupSlots[es]={type:it.puType,pulse:0}; G.puActivateFlash[es]=180;
-            spawnParticles(W/2,H/2,it.color,18,true);
-            spawnFloater(W/2,H/2-30,it.emoji+' '+it.name+' ALINDI!',it.color);
-            G.shake=5;
-          } else { spawnFloater(W/2,H*0.55,'⚠️ Slot dolu!','#ff4444'); }
-        } else { spawnFloater(W/2,H*0.55,'💰 Yeterli altın yok!','#ff4444'); }
+        if(G.gold<it.cost){ spawnFloater(W/2,H*0.55,'💰 Yeterli altın yok!','#ff4444'); return; }
+        const es=G.powerupSlots.indexOf(null);
+        if(es===-1){ spawnFloater(W/2,H*0.55,'⚠️ Slot dolu!','#ff4444'); return; }
+        // Onay sistemi
+        if(!G._shopConfirm || G._shopConfirm.idx!==i || Date.now()-G._shopConfirm.t>3000) {
+          G._shopConfirm = {idx:i, t:Date.now()};
+          spawnFloater(W/2,H*0.40,`⚠️ ${it.emoji} ${it.name} — ${it.cost}💰`, '#ffcc00');
+          spawnFloater(W/2,H*0.47,'Onaylamak için tekrar dokun!', '#ffaa00');
+          return;
+        }
+        // Onaylandı — satın al
+        G._shopConfirm = null;
+        const oldGold = G.gold;
+        G.gold-=it.cost; SAVE.gold=G.gold; saveSave();
+        G.powerupSlots[es]={type:it.puType,pulse:0}; G.puActivateFlash[es]=180;
+        spawnParticles(W/2,H/2,it.color,18,true);
+        spawnFloater(W/2,H*0.35,it.emoji+' '+it.name+' ALINDI!',it.color);
+        spawnFloater(W/2,H*0.42,`💰 ${oldGold} → ${G.gold}  (-${it.cost})`, '#ffd700');
+        G.shake=5;
         return;
       }
     }
