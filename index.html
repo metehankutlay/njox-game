@@ -5604,7 +5604,11 @@ function render() {
 // ── Input ─────────────────────────────────────────────────────
 let touching=false;
 function getPos(e) {
-  const r=canvas.getBoundingClientRect(),s=e.touches?e.touches[0]:e;
+  const r=canvas.getBoundingClientRect();
+  // touchend'de e.touches boş olur — changedTouches kullan
+  const s = (e.touches && e.touches.length > 0) ? e.touches[0]
+          : (e.changedTouches && e.changedTouches.length > 0) ? e.changedTouches[0]
+          : e;
   return {x:(s.clientX-r.left)*(W/r.width),y:(s.clientY-r.top)*(H/r.height)};
 }
 function calcAngle(px,py) {
