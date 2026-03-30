@@ -1394,12 +1394,22 @@ function stepBall(b) {
     }
   }
 
-  // Black holes swallow balls
+  // Black holes swallow balls — buz topu dondurabilir
   for(const bh of G.boss.blackHoles) {
     if(!bh.active) continue;
+    if(bh._frozenTimer > 0) continue; // donmuş kara delik — atla
     const dx=b.x-bh.x, dy=b.y-bh.y;
     const r=BS*0.55;
     if(dx*dx+dy*dy<(BALL_R+r)*(BALL_R+r)) {
+      // Buz topu kara deliği 1 tur dondurur
+      if(b.special==='ice') {
+        bh._frozenTimer = 1; // 1 tur donuk kalır
+        b.special = null; // buz etkisi kullanıldı
+        spawnParticles(bh.x,bh.y,'#aaddff',24,true);
+        spawnFloater(bh.x,bh.y-14,'🧊 DONDURULDU!','#aaddff');
+        G.shake = Math.max(G.shake, 8);
+        return; // top yutulmadı
+      }
       b.done=true;
       spawnParticles(bh.x,bh.y,'#4400aa',16,true);
       spawnFloater(bh.x,bh.y-14,'🕳️ YUTULD!','#8844ff');
@@ -1496,6 +1506,10 @@ function advanceTurn() {
     G.grid=G.grid.filter(b=>b.hp>0&&!b._dead);
     G.boss.segments=G.boss.segments.filter(s=>!s._dead);
     G.boss.blackHoles=G.boss.blackHoles.filter(bh=>bh.active);
+    // Donmuş kara deliklerin timer'ını azalt
+    for(const bh of G.boss.blackHoles) {
+      if(bh._frozenTimer > 0) bh._frozenTimer--;
+    }
     G.boss.towers=G.boss.towers.filter(t=>!t._dead);
     G.boss.towerShots=G.boss.towerShots.filter(s=>s.life>0);
     G.coins=G.coins.filter(c=>!c.collected&&c.life>0);
@@ -1624,12 +1638,14 @@ function advanceTurn() {
   G.ballColor=G.nextColor; G.nextColor=rnd(COLORS.length);
   G.combo=0;
 
-  // Kalan tur floating text — boss'ta boss.turnsLeft kullan
-  const remaining = (G.bossActive && G.boss) ? G.boss.turnsLeft : (G.turnsPerLevel - G.levelTurns);
-  const _tTotal = (G.bossActive && G.boss) ? 15 : G.turnsPerLevel;
-  if(remaining > 0 && remaining <= _tTotal) {
-    const turColor = remaining <= 3 ? '#ff4444' : remaining <= Math.ceil(_tTotal/2) ? '#ffaa00' : '#44ff88';
-    spawnFloater(W/2, H*0.5, '\u23F3 ' + remaining + ' tur kald\u0131', turColor);
+  // Kalan tur floating text — boss yenildiyse gösterme
+  if(!G.bossJustDefeated) {
+    const remaining = (G.bossActive && G.boss) ? G.boss.turnsLeft : (G.turnsPerLevel - G.levelTurns);
+    const _tTotal = (G.bossActive && G.boss) ? 15 : G.turnsPerLevel;
+    if(remaining > 0 && remaining <= 5) {
+      const turColor = remaining <= 2 ? '#ff4444' : remaining <= 4 ? '#ffaa00' : '#44ff88';
+      spawnFloater(W/2, H*0.5, '\u23F3 ' + remaining + ' tur kald\u0131', turColor);
+    }
   }
 
   handleLevelUp();
@@ -1722,6 +1738,8 @@ function update() {
     // ── Kara delik orbital hareketi ─────────────────────────
     for(const bh of boss.blackHoles) {
       bh.pulse=(bh.pulse+0.07)%(Math.PI*2);
+      // Donmuş kara delik hareket etmez
+      if(bh._frozenTimer > 0) continue;
       bh.angle=(bh.angle+bh.orbitSpeed)%(Math.PI*2);
       bh.x = Math.max(BS, Math.min(W-BS, bh.centerX + Math.cos(bh.angle)*bh.orbitR));
       bh.y = Math.max(TOP_H+BS, Math.min(H-BOT_H-BS*2, bh.centerY + Math.sin(bh.angle)*bh.orbitR));
@@ -3861,6 +3879,25 @@ function drawBossElements() {
   // Draw black holes — improved visuals
   for(const bh of boss.blackHoles) {
     if(!bh.active) continue;
+    // Donmuş kara delik — buz efekti ile çiz
+    if(bh._frozenTimer > 0) {
+      const r=BS*0.58;
+      ctx.save();
+      ctx.globalAlpha = 0.6;
+      ctx.shadowColor='#aaddff'; ctx.shadowBlur=20;
+      ctx.beginPath();ctx.arc(bh.x,bh.y,r*1.2,0,Math.PI*2);
+      const iceGrad=ctx.createRadialGradient(bh.x,bh.y,0,bh.x,bh.y,r*1.2);
+      iceGrad.addColorStop(0,'rgba(170,220,255,0.8)');
+      iceGrad.addColorStop(0.5,'rgba(100,180,240,0.4)');
+      iceGrad.addColorStop(1,'rgba(70,140,220,0)');
+      ctx.fillStyle=iceGrad; ctx.fill();
+      ctx.font=`bold ${Math.max(14,r*0.6)}px Arial`;
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillStyle='#fff'; ctx.fillText('🧊',bh.x,bh.y);
+      ctx.shadowBlur=0; ctx.globalAlpha=1;
+      ctx.restore();
+      continue;
+    }
     const r=BS*0.58, pulse=1+Math.sin(bh.pulse)*0.18;
     ctx.save();
 
