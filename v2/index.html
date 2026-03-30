@@ -364,6 +364,17 @@ function scrollToCurrentLevel() {
 
 const DPR = Math.min(window.devicePixelRatio || 1, 2); // max 2x — 3x telefonlarda çok ağır
 
+// ── Performans modu ──────────────────────────────────────
+// Mobilde shadowBlur ve fazla gradient'leri kapat
+const IS_MOBILE = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+const MAX_PARTICLES = IS_MOBILE ? 80 : 250;
+// shadowBlur wrapper — mobilde no-op
+function setShadow(color, blur) {
+  if(IS_MOBILE) { ctx.shadowBlur = 0; ctx.shadowColor = 'transparent'; return; }
+  ctx.shadowColor = color; ctx.shadowBlur = blur;
+}
+function clearShadow() { ctx.shadowBlur = 0; ctx.shadowColor = 'transparent'; }
+
 function resize() {
   W = window.innerWidth;
   H = window.innerHeight;
@@ -390,7 +401,7 @@ function resize() {
   COLS = Math.max(7, Math.min(12, Math.floor((W + GAP) / (MIN_BS + GAP))));
   BS   = Math.floor((W - GAP * (COLS - 1)) / COLS);
   MAX_ROW = Math.min(Math.floor(avH / (BS + GAP)), 16);
-  bgStars = Array.from({length:35}, ()=>({
+  bgStars = Array.from({length: IS_MOBILE ? 15 : 35}, ()=>({
     x: Math.random()*W, y: Math.random()*H,
     r: Math.random()*1.6+0.3,
     speed: Math.random()*0.3+0.08,
@@ -1070,8 +1081,14 @@ function mkBall(angle, special=null) {
 
 // ── Particles ─────────────────────────────────────────────────
 function spawnParticles(cx,cy,color,cnt,big=false) {
-  for(let i=0;i<cnt;i++) {
-    const a=Math.PI*2*i/cnt+Math.random()*0.9;
+  // Mobilde parçacık sayısını yarıya indir
+  const actual = IS_MOBILE ? Math.ceil(cnt * 0.5) : cnt;
+  // Limit: çok fazla parçacık birikmesin
+  if(G.particles.length >= MAX_PARTICLES) {
+    G.particles.splice(0, actual); // eski parçacıkları sil
+  }
+  for(let i=0;i<actual;i++) {
+    const a=Math.PI*2*i/actual+Math.random()*0.9;
     const sp=big?(6+Math.random()*11):(3+Math.random()*6);
     G.particles.push({ x:cx,y:cy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,
       color, life:big?65+rnd(30):45+rnd(20), maxLife:95,
@@ -1164,7 +1181,8 @@ function getBossCenter() {
 function stepBall(b) {
   if(b.done) return;
   b.trail.push({x:b.x,y:b.y,life:9});
-  if(b.trail.length>9) b.trail.shift();
+  const _maxTrail = IS_MOBILE ? 4 : 9;
+  if(b.trail.length>_maxTrail) b.trail.shift();
   for(const t of b.trail) t.life--;
   b.trail=b.trail.filter(t=>t.life>0);
 
@@ -2044,15 +2062,20 @@ function rrect(x,y,w,h,r) {
   ctx.closePath();
 }
 
+let _bgGradCache=null, _bgGradH=0, _bgGradIce=null;
 function drawBg() {
   const isIce = G.levelCfg && G.levelCfg.isIceWorld;
-  const bg=ctx.createLinearGradient(0,0,0,H);
-  if(isIce){
-    bg.addColorStop(0,'#050f1a');bg.addColorStop(0.5,'#091422');bg.addColorStop(1,'#050f1a');
-  } else {
-    bg.addColorStop(0,'#08081a');bg.addColorStop(0.5,'#0c0c24');bg.addColorStop(1,'#08081a');
+  // Gradient cache — H veya isIce değişmedikçe yeniden oluşturma
+  if(!_bgGradCache || _bgGradH !== H || _bgGradIce !== isIce) {
+    _bgGradCache=ctx.createLinearGradient(0,0,0,H);
+    if(isIce){
+      _bgGradCache.addColorStop(0,'#050f1a');_bgGradCache.addColorStop(0.5,'#091422');_bgGradCache.addColorStop(1,'#050f1a');
+    } else {
+      _bgGradCache.addColorStop(0,'#08081a');_bgGradCache.addColorStop(0.5,'#0c0c24');_bgGradCache.addColorStop(1,'#08081a');
+    }
+    _bgGradH=H; _bgGradIce=isIce;
   }
-  ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+  ctx.fillStyle=_bgGradCache;ctx.fillRect(0,0,W,H);
   // Buz dünyası: hafif kar tanesi efekti (düşen noktalar)
   if(isIce) {
     ctx.save();
@@ -2071,12 +2094,15 @@ function drawBg() {
     ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
     ctx.fillStyle=sc;ctx.fill();
   }
-  ctx.save();ctx.globalAlpha=0.04;
-  for(let c=0;c<=COLS;c++) for(let r=0;r<=MAX_ROW;r++) {
-    ctx.beginPath();ctx.arc(bx(c)-GAP/2,by(r)-GAP/2,1.2,0,Math.PI*2);
-    ctx.fillStyle='#fff';ctx.fill();
+  // Izgara noktaları — mobilde atla (performans)
+  if(!IS_MOBILE) {
+    ctx.save();ctx.globalAlpha=0.04;
+    for(let c=0;c<=COLS;c++) for(let r=0;r<=MAX_ROW;r++) {
+      ctx.beginPath();ctx.arc(bx(c)-GAP/2,by(r)-GAP/2,1.2,0,Math.PI*2);
+      ctx.fillStyle='#fff';ctx.fill();
+    }
+    ctx.restore();
   }
-  ctx.restore();
 }
 
 function drawBlock(bl) {
@@ -5512,6 +5538,18 @@ function drawIntroScreen() {
   ctx.textAlign='center'; ctx.textBaseline='bottom';
   ctx.fillText('Njox the Game  v1.0', W/2, H-10);
   ctx.restore();
+}
+
+// Mobilde shadowBlur'ı tamamen devre dışı bırak — her frame'de 184× çağrılıyor
+if(IS_MOBILE) {
+  const _origShadowBlurDesc = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'shadowBlur');
+  if(_origShadowBlurDesc) {
+    Object.defineProperty(ctx, 'shadowBlur', {
+      set(v) { /* mobilde no-op */ },
+      get() { return 0; },
+      configurable: true
+    });
+  }
 }
 
 function render() {
